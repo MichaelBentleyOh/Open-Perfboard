@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 16~32px용 단순화 버전: 패드 3x3, 굵은 전선 -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="#237548"/>
+  <g fill="#e0a84a">
+    <circle cx="136" cy="136" r="36"/><circle cx="256" cy="136" r="36"/><circle cx="376" cy="136" r="36"/>
+    <circle cx="136" cy="256" r="36"/><circle cx="256" cy="256" r="36"/><circle cx="376" cy="256" r="36"/>
+    <circle cx="136" cy="376" r="36"/><circle cx="256" cy="376" r="36"/><circle cx="376" cy="376" r="36"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="48">
+    <path d="M136 376 V256 H376 V136" stroke="#e53935"/>
+    <path d="M376 376 H256" stroke="#1e88e5"/>
+  </g>
+</svg>

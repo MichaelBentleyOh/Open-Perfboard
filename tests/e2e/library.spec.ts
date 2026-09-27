@@ -1,0 +1,70 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { expect, test } from '@playwright/test'
+import { launchApp, makeUserDataDir } from './launch'
+
+const PHOTO = join(__dirname, '../fixtures/part-photo.png')
+
+test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 후 유지 → 삭제', async () => {
+  const userData = makeUserDataDir()
+  const libDir = join(userData, 'library')
+
+  // 1. 부품 추가
+  let { app, win } = await launchApp(userData)
+  try {
+    await win.getByRole('button', { name: '＋ 새 부품' }).click()
+    const dialog = win.getByRole('dialog', { name: '부품 편집' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '저장' })).toBeDisabled()
+
+    await dialog.getByTestId('photo-input').setInputFiles(PHOTO)
+    const canvas = dialog.getByTestId('pin-canvas')
+    await expect(canvas.locator('canvas').first()).toBeVisible()
+
+    // 사진 가운데 근처를 두 번 클릭 → 핀 1, 2 자동 번호
+    const box = (await canvas.boundingBox())!
+    await win.mouse.click(box.x + box.width / 2 - 40, box.y + box.height / 2)
+    await win.mouse.click(box.x + box.width / 2 + 40, box.y + box.height / 2)
+    const numbers = dialog.getByLabel('핀 번호')
+    await expect(numbers).toHaveCount(2)
+    await expect(numbers.nth(0)).toHaveValue('1')
+    await expect(numbers.nth(1)).toHaveValue('2')
+
+    // 자동 번호를 사용자가 수정
+    await numbers.nth(0).fill('VCC')
+    await dialog.getByLabel('신호').nth(1).fill('SDA')
+
+    await dialog.getByPlaceholder('제어 보드 CB-100').fill('테스트 보드')
+    await win.screenshot({ path: 'test-results/part-editor.png' })
+    await dialog.getByRole('button', { name: '저장' }).click()
+    await expect(dialog).toBeHidden()
+
+    const list = win.getByTestId('part-list')
+    await expect(list).toContainText('테스트 보드')
+    await expect(list).toContainText('핀 2')
+    await win.screenshot({ path: 'test-results/library-added.png' })
+  } finally {
+    await app.close()
+  }
+
+  // 파일로 저장됐는지 확인
+  const files = readdirSync(libDir)
+  expect(files).toHaveLength(1)
+  const saved = JSON.parse(readFileSync(join(libDir, files[0]), 'utf8'))
+  expect(saved.name).toBe('테스트 보드')
+  expect(saved.pins.map((p: { number: string }) => p.number)).toEqual(['VCC', '2'])
+  expect(saved.pins[1].signal).toBe('SDA')
+
+  // 2. 재시작해도 남아 있고, 삭제할 수 있다
+  ;({ app, win } = await launchApp(userData))
+  try {
+    const list = win.getByTestId('part-list')
+    await expect(list).toContainText('테스트 보드')
+    await list.getByRole('button', { name: '삭제' }).click()
+    await expect(list).not.toContainText('테스트 보드')
+    await expect(win.getByText('부품함이 비어 있습니다.')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+  expect(existsSync(join(libDir, files[0]))).toBe(false)
+})

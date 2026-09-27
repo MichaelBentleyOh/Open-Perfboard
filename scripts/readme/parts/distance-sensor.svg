@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 160" width="260" height="160">
+  <!-- 거리 센서 DS-4 (README 예시용으로 직접 그림) -->
+  <rect x="6" y="6" width="248" height="148" rx="10" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="3"/>
+  <g fill="#e5e7eb" stroke="#9ca3af" stroke-width="4"><circle cx="70" cy="58" r="38"/><circle cx="190" cy="58" r="38"/></g>
+  <g fill="#6b7280"><circle cx="70" cy="58" r="24"/><circle cx="190" cy="58" r="24"/></g>
+  <text x="130" y="62" font-family="Consolas, monospace" font-size="13" fill="#dbeafe" text-anchor="middle">DS-4</text>
+  <rect x="62" y="124" width="136" height="26" rx="4" fill="#111827"/>
+  <g fill="#e2b34a" stroke="#8a6a1f" stroke-width="2"><circle cx="80" cy="137" r="6"/><circle cx="113" cy="137" r="6"/><circle cx="147" cy="137" r="6"/><circle cx="180" cy="137" r="6"/></g>
+  <g font-family="Consolas, monospace" font-size="10" fill="#fff" text-anchor="middle"><text x="80" y="115">VCC</text><text x="113" y="115">TRIG</text><text x="147" y="115">ECHO</text><text x="180" y="115">GND</text></g>
+</svg>

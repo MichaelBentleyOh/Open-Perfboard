@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# Test and performance results
+test-results/
+playwright-report/
+coverage/
+
+# Logs and temporary files
+*.log
+*.tmp
+.env
+.env.*
+
+# Development Settings
+docs/*
+CLAUDE.md
+.claude/
+
+# Personal diagrams and parts bins in the repo root (test fixtures in tests/fixtures/ are kept)
+/*.opb
+/*.opblib
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

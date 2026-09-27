@@ -1,0 +1,22 @@
+appId: com.openperfboard.app
+productName: Open Perfboard
+directories:
+  output: dist
+files:
+  - out/**
+  - build/icon.png # 창 아이콘 (main/index.ts)
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+fileAssociations:
+  - ext: opb
+    name: Open Perfboard Project
+    description: Open Perfboard 배선도
+# 향후 Linux 지원
+linux:
+  target: [AppImage, deb]
+  category: Engineering
+  icon: build/icons

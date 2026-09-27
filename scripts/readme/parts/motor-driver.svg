@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 240" width="300" height="240">
+  <!-- 모터 드라이버 MD-2A (README 예시용으로 직접 그림) -->
+  <rect x="6" y="6" width="288" height="228" rx="12" fill="#b91c1c" stroke="#7f1d1d" stroke-width="3"/>
+  <rect x="95" y="20" width="110" height="90" rx="4" fill="#9ca3af"/>
+  <g fill="#d1d5db"><rect x="102" y="24" width="10" height="82"/><rect x="120" y="24" width="10" height="82"/><rect x="138" y="24" width="10" height="82"/><rect x="156" y="24" width="10" height="82"/><rect x="174" y="24" width="10" height="82"/><rect x="190" y="24" width="10" height="82"/></g>
+  <text x="150" y="140" font-family="Consolas, monospace" font-size="18" fill="#fee2e2" text-anchor="middle">MD-2A</text>
+  <rect x="6" y="64" width="48" height="84" rx="4" fill="#15803d"/>
+  <circle cx="24" cy="84" r="9" fill="#d1d5db" stroke="#6b7280" stroke-width="2"/><circle cx="24" cy="132" r="9" fill="#d1d5db" stroke="#6b7280" stroke-width="2"/>
+  <rect x="246" y="64" width="48" height="84" rx="4" fill="#15803d"/>
+  <circle cx="276" cy="84" r="9" fill="#d1d5db" stroke="#6b7280" stroke-width="2"/><circle cx="276" cy="132" r="9" fill="#d1d5db" stroke="#6b7280" stroke-width="2"/>
+  <g font-family="Consolas, monospace" font-size="12" fill="#fff">
+    <text x="60" y="88">VM</text><text x="60" y="136">GND</text>
+    <text x="240" y="88" text-anchor="end">M+</text><text x="240" y="136" text-anchor="end">M-</text>
+  </g>
+  <rect x="70" y="196" width="160" height="30" rx="4" fill="#111827"/>
+  <g fill="#e2b34a" stroke="#8a6a1f" stroke-width="2"><circle cx="90" cy="211" r="7"/><circle cx="130" cy="211" r="7"/><circle cx="170" cy="211" r="7"/><circle cx="210" cy="211" r="7"/></g>
+  <g font-family="Consolas, monospace" font-size="11" fill="#fff" text-anchor="middle"><text x="90" y="186">IN1</text><text x="130" y="186">IN2</text><text x="170" y="186">EN</text><text x="210" y="186">GND</text></g>
+</svg>

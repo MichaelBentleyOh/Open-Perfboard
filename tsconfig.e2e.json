@@ -1,0 +1,26 @@
+{
+  // E2E: Node(Playwright)와 브라우저(page.evaluate 안) 코드가 섞여 있어 DOM 타입도 필요하다
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "paths": { "@core/*": ["./src/core/*"] }
+  },
+  "include": [
+    "tests/e2e/**/*",
+    "tests/perf/synth.ts",
+    "scripts/readme/*.ts",
+    "src/core/**/*",
+    "src/renderer/src/features/canvas/testHooks.d.ts",
+    "playwright.config.ts",
+    "playwright.perf.config.ts",
+    "playwright.packaged.config.ts",
+    "playwright.readme.config.ts"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "name": "예제: 제어 보드 + 전원 커넥터",
+  "parts": {
+    "part-ctrl": {
+      "id": "part-ctrl",
+      "name": "제어 보드 CB-100",
+      "partNumber": "CB-100",
+      "manufacturer": "OPB Labs",
+      "refPrefix": "U",
+      "image": { "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "width": 1, "height": 1 },
+      "connectors": [{ "id": "c-j1", "name": "J1", "type": "JST-XH 4P" }],
+      "pins": [
+        { "id": "p1", "number": "1", "signal": "VIN", "connectorId": "c-j1", "x": 0.1, "y": 0.2 },
+        { "id": "p2", "number": "2", "signal": "GND", "connectorId": "c-j1", "x": 0.1, "y": 0.4 },
+        { "id": "p3", "number": "3", "signal": "SDA", "connectorId": "c-j1", "x": 0.1, "y": 0.6 },
+        { "id": "p4", "number": "4", "signal": "SCL", "connectorId": "c-j1", "x": 0.1, "y": 0.8 }
+      ]
+    },
+    "part-pwr": {
+      "id": "part-pwr",
+      "name": "전원 커넥터 PWR-2P",
+      "refPrefix": "CN",
+      "image": { "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "width": 1, "height": 1 },
+      "connectors": [{ "id": "c-p1", "name": "P1", "type": "XT60" }],
+      "pins": [
+        { "id": "b1", "number": "+", "signal": "+12V", "connectorId": "c-p1", "x": 0.9, "y": 0.3 },
+        { "id": "b2", "number": "-", "signal": "GND", "connectorId": "c-p1", "x": 0.9, "y": 0.7 }
+      ]
+    }
+  },
+  "instances": [
+    { "id": "i1", "partId": "part-ctrl", "refDes": "U1", "x": 100, "y": 100, "rotation": 0, "scale": 1 },
+    { "id": "i2", "partId": "part-pwr", "refDes": "CN1", "x": 400, "y": 100, "rotation": 0, "scale": 1 }
+  ],
+  "wires": [
+    { "id": "w1", "from": { "instanceId": "i2", "pinId": "b1" }, "to": { "instanceId": "i1", "pinId": "p1" }, "color": "#e53935", "width": 2, "label": "+12V" },
+    { "id": "w2", "from": { "instanceId": "i2", "pinId": "b2" }, "to": { "instanceId": "i1", "pinId": "p2" }, "color": "#212121", "width": 2 }
+  ]
+}
