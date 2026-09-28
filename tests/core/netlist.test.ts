@@ -25,8 +25,15 @@ describe('buildNetlist', () => {
 
   it('CSV로 내보낼 수 있다 (규격·길이는 없으면 빈 칸)', () => {
     const csv = toCsv(buildNetlist(loadSample()), NETLIST_COLUMNS)
-    expect(csv.split('\r\n')[0]).toBe('﻿시작,시작 신호,끝,끝 신호,색상,규격(AWG),길이(mm),라벨')
-    expect(csv).toContain('CN1.P1.+,+12V,U1.J1.1,VIN,#e53935,,,+12V')
+    expect(csv.split('\r\n')[0]).toBe('﻿시작,시작 신호,방향,끝,끝 신호,색상,규격(AWG),길이(mm),라벨')
+    expect(csv).toContain('CN1.P1.+,+12V,↔,U1.J1.1,VIN,#e53935,,,+12V')
+  })
+
+  it('방향은 파일에 → ← ↔ 로 쓴다 (-로 시작하면 엑셀이 수식으로 읽는다)', () => {
+    const p = updateWires(loadSample(), ['w1'], { direction: 'forward' })
+    const csv = toCsv(buildNetlist(p), NETLIST_COLUMNS)
+    expect(csv).not.toContain(',->,')
+    expect(csv).toMatch(/,[→←],/)
   })
 
   it('전선 규격(AWG)·길이(mm)가 결선표에 나온다', () => {

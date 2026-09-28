@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { CommitInput } from '@/components/CommitInput'
 import { tidyWiring } from '@/app/editCommands'
 import { AWG_MAX, AWG_MIN, type PartDef, type PartInstance } from '@core/model'
@@ -11,6 +12,8 @@ import { useProjectStore } from '@/stores/projectStore'
 import { WIRE_COLORS, useUiStore } from '@/stores/uiStore'
 import { t as tNow, useT } from '@/i18n'
 import { AttachmentList } from '@/features/attachments/AttachmentList'
+import { connectionLabelsOf } from '@/features/reports/connectionLabels'
+import { ColorSpectrum } from './ColorSpectrum'
 
 const store = useProjectStore.getState
 const notify = (m: string) => useUiStore.getState().notify(m)
@@ -310,6 +313,8 @@ function WireProps({ id }: { id: string }) {
   const project = useProjectStore((s) => s.project)
   const wire = project.wires.find((w) => w.id === id)!
   const row = buildNetlist({ ...project, wires: [wire] })[0]
+  // 이름의 앞뒤 순서가 결선표와 같도록 전체 배선도로 계산한 것을 쓴다
+  const connection = connectionLabelsOf(project).byWire.get(wire.id)
   if (!row) return null
   const update = (patch: Parameters<ReturnType<typeof store>['updateWires']>[1]) => store().updateWires([wire.id], patch)
   return (
@@ -321,6 +326,11 @@ function WireProps({ id }: { id: string }) {
         <br />↔ {row.to.label}
         {row.to.signal && <small> {row.to.signal}</small>}
       </p>
+      {connection && (
+        <p className="wire-connection" data-testid="wire-connection" title={t('신호 방향은 결선표 탭에서 바꿉니다')}>
+          {connection.name}
+        </p>
+      )}
 
       <h3 className="props-section">{t('스펙')}</h3>
       <Field label={t('규격(AWG)')}>
@@ -420,8 +430,11 @@ function TransformButtons({ ids }: { ids: string[] }) {
 /** 모두 같으면 그 값, 섞여 있으면 빈 문자열 (어떤 색도 선택 표시 안 함) */
 const commonValue = (values: string[]) => (values.every((v) => v === values[0]) ? values[0] : '')
 
+/** 기본 8색 + 사용자 색(스펙트럼·RGB 입력, 026). 팔레트에 없는 색이면 사용자 색 단추가 그 색으로 켜진다 */
 export function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const t = useT()
+  const [open, setOpen] = useState(false)
+  const custom = !!value && !WIRE_COLORS.some((c) => c.value === value)
   return (
     <div className="color-picker" role="radiogroup" aria-label={t('전선 색')}>
       {WIRE_COLORS.map((c) => (
@@ -436,6 +449,17 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (c: 
           onClick={() => onChange(c.value)}
         />
       ))}
+      <button
+        role="radio"
+        aria-checked={custom}
+        aria-expanded={open}
+        aria-label={t('사용자 색')}
+        title={custom ? `${t('사용자 색')} ${value}` : t('사용자 색 (스펙트럼·RGB 입력)')}
+        className={custom ? 'swatch-btn custom active' : 'swatch-btn custom'}
+        style={custom ? { background: value } : undefined}
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && <ColorSpectrum value={value} onCommit={onChange} onClose={() => setOpen(false)} />}
     </div>
   )
 }

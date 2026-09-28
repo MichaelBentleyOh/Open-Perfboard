@@ -1,5 +1,5 @@
 import type { CsvColumn } from './csv'
-import type { Project, WireEnd } from './model'
+import type { Project, Wire, WireDirection, WireEnd } from './model'
 import { endLabel, isJunctionEnd, resolvePin } from './ends'
 import { naturalCompare } from './sort'
 import { msg } from './i18n'
@@ -23,6 +23,25 @@ export interface NetlistRow {
   awg?: number
   /** 전선 길이 (mm) */
   length?: number
+  /** 이 행의 시작 → 끝 기준 신호 방향 */
+  arrow: Arrow
+  /** 행의 시작이 전선의 to 쪽이다 (정렬하느라 뒤집었다) → 방향을 바꿀 때 되돌린다 */
+  reversed: boolean
+}
+
+export type Arrow = '->' | '<-' | '<->'
+
+/** 전선 방향(from → to 기준)을 화살표로 */
+export function wireArrow(w: Pick<Wire, 'direction'>): Arrow {
+  return w.direction === 'forward' ? '->' : w.direction === 'reverse' ? '<-' : '<->'
+}
+
+export const REVERSED_ARROW: Record<Arrow, Arrow> = { '->': '<-', '<-': '->', '<->': '<->' }
+
+/** 화면에 보인 화살표(보인 순서가 전선과 뒤집혔으면 reversed)를 전선에 저장할 방향으로 */
+export function arrowToDirection(arrow: Arrow, reversed: boolean): WireDirection | undefined {
+  const a = reversed ? REVERSED_ARROW[arrow] : arrow
+  return a === '->' ? 'forward' : a === '<-' ? 'reverse' : undefined
 }
 
 /** 전선 끝을 풀어 쓴다. 접속점은 SP1처럼 이름만 */
@@ -50,15 +69,21 @@ export function buildNetlist(project: Project): NetlistRow[] {
       let from = describe(project, w.from)
       let to = describe(project, w.to)
       // 같은 연결이 방향에 따라 다르게 보이지 않도록 앞쪽 끝을 정규화한다
-      if (naturalCompare(from.label, to.label) > 0) [from, to] = [to, from]
-      return { wireId: w.id, from, to, color: w.color, label: w.label, awg: w.awg, length: w.length }
+      const reversed = naturalCompare(from.label, to.label) > 0
+      if (reversed) [from, to] = [to, from]
+      const arrow = reversed ? REVERSED_ARROW[wireArrow(w)] : wireArrow(w)
+      return { wireId: w.id, from, to, color: w.color, label: w.label, awg: w.awg, length: w.length, arrow, reversed }
     })
     .sort((a, b) => naturalCompare(a.from.label, b.from.label) || naturalCompare(a.to.label, b.to.label))
 }
 
+const FILE_ARROW: Record<Arrow, string> = { '->': '→', '<-': '←', '<->': '↔' }
+
 export const NETLIST_COLUMNS: CsvColumn<NetlistRow>[] = [
   { header: msg('시작'), value: (r) => r.from.label },
   { header: msg('시작 신호'), value: (r) => r.from.signal },
+  // 파일에는 → ← ↔ 로 쓴다 (엑셀은 -로 시작하는 칸을 수식으로 읽는다)
+  { header: msg('방향'), value: (r) => FILE_ARROW[r.arrow] },
   { header: msg('끝'), value: (r) => r.to.label },
   { header: msg('끝 신호'), value: (r) => r.to.signal },
   { header: msg('색상'), value: (r) => r.color },

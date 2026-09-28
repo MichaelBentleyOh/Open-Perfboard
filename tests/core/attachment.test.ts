@@ -84,7 +84,7 @@ describe('파일 포맷 v5', () => {
   })
 
   it('배선도 파일의 첨부 본문 왕복, 예전 파일은 빈 본문, 잘못된 본문 거부', () => {
-    expect(PROJECT_FILE_VERSION).toBe(5)
+    expect(PROJECT_FILE_VERSION).toBeGreaterThanOrEqual(5)
     const p = loadSample()
     const data = { [ID_A]: bytesToBase64(ascii('%PDF-1.4')) }
     const r = parseProjectFile(serializeProject(p, [], data))

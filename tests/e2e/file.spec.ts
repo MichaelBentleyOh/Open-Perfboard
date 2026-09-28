@@ -76,7 +76,7 @@ test('저장 → 새로 만들기 → 열기 → BOM·결선표 → 내보내기
     await stubDialogs(app, { save: netCsv })
     await netlist.getByRole('button', { name: 'CSV 내보내기' }).click()
     await expect.poll(() => existsSync(`${netCsv}.csv`)).toBe(true)
-    expect(readFileSync(`${netCsv}.csv`, 'utf8')).toContain('U1.J1.2,GND,U2.J1.1,VCC,#e53935,')
+    expect(readFileSync(`${netCsv}.csv`, 'utf8')).toContain('U1.J1.2,GND,↔,U2.J1.1,VCC,#e53935,')
 
     // 9. PNG 내보내기 (결선표 탭에 있어도 동작)
     const png = join(out, 'diagram.png')

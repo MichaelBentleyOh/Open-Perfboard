@@ -54,6 +54,7 @@ export interface BusyTask {
 
 /** 선택 모드: 고르고 옮기기 · 배선 모드: 핀·전선·접속점에서 전선 잇기와 분기 */
 export type Tool = 'select' | 'wire'
+export type NetlistMode = 'table' | 'labels'
 
 interface UiState {
   tool: Tool
@@ -92,6 +93,12 @@ interface UiState {
   /** 열려 있는 부품 가져오기 대화상자 (라이브러리 패널의 가져오기, 배선도 열기) */
   importRequest: ImportRequest | null
   setImportRequest: (r: ImportRequest | null) => void
+  /** 결선표 탭: 표 또는 연결 라벨 (025) */
+  netlistMode: NetlistMode
+  setNetlistMode: (mode: NetlistMode) => void
+  /** 연결 라벨 보기에서 이 부품과 이어진 부품만 (null = 모두) */
+  labelFocus: string | null
+  setLabelFocus: (instanceId: string | null) => void
   /** 단축키 도움말 (? 버튼, ? / F1 키) */
   helpOpen: boolean
   setHelpOpen: (open: boolean) => void
@@ -123,6 +130,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     return n
   },
   select: (selection) => set({ selection }),
+  netlistMode: 'table',
+  setNetlistMode: (netlistMode) => set({ netlistMode }),
+  labelFocus: null,
+  setLabelFocus: (labelFocus) => set({ labelFocus }),
   selectOne: (kind, id) => set({ selection: { ...EMPTY_SELECTION, [listOf(kind)]: [id] } }),
   toggle: (kind, id) => {
     const key = listOf(kind)

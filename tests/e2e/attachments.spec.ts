@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { dropPart, getProject, launchApp, makeTempDir, makeUserDataDir, nextFrame, seedLibrary, stubDialogs } from './launch'
+import { PROJECT_FILE_VERSION } from '../../src/core/model'
 
 const FIXTURES = join(__dirname, '../fixtures')
 
@@ -84,7 +85,7 @@ test('부품 첨부: 편집기에서 PDF·그림 첨부 → 속성 창 썸네일
     await win.keyboard.press('Control+Shift+s')
     await expect(win.getByRole('status')).toContainText('저장했습니다')
     const plainRaw = JSON.parse(readFileSync(plain, 'utf8'))
-    expect(plainRaw.version).toBe(5)
+    expect(plainRaw.version).toBe(PROJECT_FILE_VERSION)
     expect(Object.values(plainRaw.parts as Record<string, { attachments: unknown[] }>)[0].attachments).toHaveLength(2)
     expect(plainRaw.attachmentData).toBeUndefined()
     await win.getByText('파일 ▾').click()

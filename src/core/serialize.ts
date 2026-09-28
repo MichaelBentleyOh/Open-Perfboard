@@ -5,6 +5,8 @@ import {
   AWG_MAX,
   AWG_MIN,
   PROJECT_FILE_VERSION,
+  WIRE_DIRECTIONS,
+  type WireDirection,
   type Connector,
   type PartDef,
   type PartImage,
@@ -143,7 +145,9 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v3 → v4: 전선 규격(awg)·길이(length)가 생김. 없는 파일은 그대로
   3: (raw) => ({ ...raw, version: 4 }),
   // v4 → v5: 부품 첨부(attachments)와 첨부 본문(attachmentData)이 생김. 없는 파일은 그대로
-  4: (raw) => ({ ...raw, version: 5 })
+  4: (raw) => ({ ...raw, version: 5 }),
+  // v5 → v6: 전선 신호 방향(direction)이 생김. 없는 전선은 양방향
+  5: (raw) => ({ ...raw, version: 6 })
 }
 
 function migrate(raw: unknown, errors: Errors): Record<string, unknown> | undefined {
@@ -374,6 +378,9 @@ function readWire(v: unknown, path: string, errors: Errors): Wire | undefined {
   const awg = v.awg === undefined ? undefined : num(v, 'awg', path, errors, { min: AWG_MIN, max: AWG_MAX })
   if (awg !== undefined && !Number.isInteger(awg)) errors.push('{path}: 정수여야 합니다', { path: `${path}awg` })
   const length = v.length === undefined ? undefined : num(v, 'length', path, errors, { min: 0 })
+  const direction = v.direction
+  const directionOk = direction === undefined || WIRE_DIRECTIONS.includes(direction as WireDirection)
+  if (!directionOk) errors.push("{path}: 'forward' 또는 'reverse'여야 합니다", { path: `${path}direction` })
   if (id === undefined || !from || !to || color === undefined || width === undefined) return undefined
   return {
     id, from, to, color, width,
@@ -381,7 +388,8 @@ function readWire(v: unknown, path: string, errors: Errors): Wire | undefined {
     ...(points && points.length > 0 ? { points } : {}),
     ...(orthogonal === true ? { orthogonal: true } : {}),
     ...(awg !== undefined ? { awg } : {}),
-    ...(length !== undefined ? { length } : {})
+    ...(length !== undefined ? { length } : {}),
+    ...(directionOk && direction !== undefined ? { direction: direction as WireDirection } : {})
   }
 }
 

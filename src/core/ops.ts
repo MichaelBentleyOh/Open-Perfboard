@@ -110,7 +110,7 @@ export function disconnect(project: Project, wireId: string): Project {
   return cleanupJunctions({ ...project, wires: project.wires.filter((w) => w.id !== wireId) })
 }
 
-export type WirePatch = Partial<Pick<Wire, 'color' | 'width' | 'label' | 'points' | 'orthogonal' | 'awg' | 'length'>>
+export type WirePatch = Partial<Pick<Wire, 'color' | 'width' | 'label' | 'points' | 'orthogonal' | 'awg' | 'length' | 'direction'>>
 
 export function updateWire(project: Project, wireId: string, patch: WirePatch): Project {
   return { ...project, wires: project.wires.map((w) => (w.id === wireId ? applyWirePatch(w, patch) : w)) }
@@ -123,6 +123,7 @@ function applyWirePatch(w: Wire, patch: WirePatch): Wire {
   if (!next.points || next.points.length === 0) delete next.points
   if (!next.orthogonal) delete next.orthogonal
   if (next.awg === undefined) delete next.awg
+  if (!next.direction) delete next.direction
   if (next.length === undefined) delete next.length
   return next
 }

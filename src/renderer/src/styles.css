@@ -86,6 +86,67 @@ button:disabled {
   grid-area: right;
   border-left: 1px solid var(--border);
 }
+/* 창 접기: 접으면 그 칸이 얇은 띠(28px)가 되고 가운데 배선도가 넓어진다 */
+.app.left-collapsed {
+  grid-template-columns: 28px 1fr 260px;
+}
+.app.right-collapsed {
+  grid-template-columns: 240px 1fr 28px;
+}
+.app.left-collapsed.right-collapsed {
+  grid-template-columns: 28px 1fr 28px;
+}
+.panel {
+  position: relative;
+}
+.panel-collapse {
+  position: absolute;
+  top: 8px;
+  z-index: 1;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 22px;
+}
+.panel.left .panel-collapse {
+  right: 6px;
+}
+.panel.right .panel-collapse {
+  right: 6px;
+}
+.panel-collapse:hover {
+  color: var(--text);
+  background: #eef0f2;
+}
+.panel-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border: none;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+}
+.panel-strip.left {
+  grid-area: left;
+  border-right: 1px solid var(--border);
+}
+.panel-strip.right {
+  grid-area: right;
+  border-left: 1px solid var(--border);
+}
+.panel-strip:hover {
+  color: var(--text);
+  background: #f3f5f3;
+}
+.panel-strip-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
 .panel h2 {
   margin: 0 0 4px;
   font-size: 14px;
@@ -515,6 +576,56 @@ kbd {
   min-height: 0;
   overflow: hidden;
 }
+/* 부품 편집기 도구 줄 (026): 핀 찍기 / 보조선 긋기, 붙이기, 고른 보조선 작업 */
+.pin-tools {
+  display: flex;
+  /* 한 줄로 고정 (줄이 늘면 사진이 밀려 찍던 자리가 어긋난다). 좁으면 옆으로 스크롤 */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  white-space: nowrap;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: #e7eae6;
+  border-radius: 8px;
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  padding: 3px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.segmented button.active {
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.pin-tools .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.guide-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.guide-actions input.narrow {
+  width: 56px;
+}
 .photo-empty {
   flex: 1;
   display: flex;
@@ -636,6 +747,94 @@ kbd {
 }
 .swatch-btn.active {
   box-shadow: 0 0 0 2px var(--accent);
+}
+/* 사용자 색 (026): 팔레트에 없는 색이면 그 색, 아니면 무지개 */
+.swatch-btn.custom {
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+}
+.color-picker {
+  position: relative;
+}
+.color-spectrum {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 240px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18);
+}
+.spectrum-area {
+  position: relative;
+  height: 140px;
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.spectrum-cursor {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+.spectrum-hue {
+  width: 100%;
+  height: 14px;
+  margin: 10px 0 8px;
+  appearance: none;
+  border-radius: 7px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.spectrum-hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+}
+.spectrum-fields {
+  display: grid;
+  grid-template-columns: 26px repeat(3, 1fr);
+  gap: 6px;
+  align-items: end;
+}
+.spectrum-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.spectrum-fields input {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.spectrum-preview {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgb(0 0 0 / 0.15);
+}
+.spectrum-hex {
+  grid-column: 1 / -1;
+}
+.spectrum-hex input {
+  font-family: Consolas, monospace;
 }
 
 /* ---------- 캔버스 ---------- */
@@ -1147,4 +1346,370 @@ button.grow {
   font-family: Consolas, monospace;
   font-size: 13px;
   line-height: 1.8;
+}
+
+/* ---------------------------------------------------------------- 결선표 연결 라벨 (025) */
+.netlist-mode {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 3px;
+  background: #e7eae6;
+  border-radius: 8px;
+}
+.netlist-mode button {
+  border: none;
+  background: transparent;
+  padding: 3px 14px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.netlist-mode button.active {
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.conn-hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.conn-focus {
+  max-width: 320px;
+}
+/* 고른 연결의 신호 방향 바꾸기. 목록을 내려도 보이게 위에 붙는다 */
+.conn-direction {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -16px 12px;
+  padding: 8px 16px;
+  background: #f0fdf4;
+  border-top: 1px solid #bbf7d0;
+  border-bottom: 1px solid #bbf7d0;
+}
+.conn-direction-title {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.conn-direction button.active {
+  border-color: var(--accent);
+  background: #dcfce7;
+  color: var(--accent);
+}
+.conn-direction-signal {
+  color: var(--muted);
+}
+.arrow-select {
+  font-family: Consolas, monospace;
+  font-weight: 700;
+}
+/* 목록: 넓으면 카드 두 개씩(1920px 화면, 또는 양옆 창을 접으면), 좁으면 하나 */
+.conn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.conn-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px 14px;
+  background: var(--panel);
+}
+.conn-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(21 128 61 / 0.15);
+}
+.conn-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.conn-card-header .link {
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font-size: 13px;
+}
+.conn-card-header .link:hover {
+  text-decoration: underline;
+}
+/* 왼쪽 깃발 줄 | 사진 | 오른쪽 깃발 줄. 사이 틈(gap)에 핀에서 나온 선이 꺾인다 */
+.conn-body {
+  position: relative;
+  display: grid;
+  /* 깃발 줄은 글자만큼(좁으면 줄어듦), 깃발이 없는 쪽은 0 → 사진과 깃발이 가운데에 모인다 */
+  grid-template-columns: auto auto auto;
+  justify-content: center;
+  column-gap: 36px;
+  align-items: center;
+}
+.conn-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.conn-flags.left {
+  align-items: flex-end;
+}
+.conn-flags.right {
+  align-items: flex-start;
+}
+.conn-photo {
+  position: relative;
+  /* 위·아래로 빼는 선이 지나갈 자리 */
+  margin: 52px 0;
+}
+.conn-photo img {
+  display: block;
+  max-width: 120px;
+  max-height: 84px;
+}
+.conn-photo img.openable {
+  cursor: zoom-in;
+}
+.conn-card.large .conn-body {
+  column-gap: 56px;
+}
+.conn-card.large .conn-photo img {
+  max-width: 200px;
+  max-height: 170px;
+}
+.conn-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #475569;
+}
+.conn-dot.on {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  background: #facc15;
+  border-color: var(--accent);
+}
+.conn-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.conn-leaders polyline {
+  fill: none;
+  stroke: #64748b;
+  stroke-width: 1.5;
+}
+.conn-leaders polyline.on {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.conn-leaders marker path {
+  fill: #64748b;
+}
+.conn-leaders marker path.on {
+  fill: var(--accent);
+}
+/*
+ * 깃발 = Simulink Goto/From 블록 모양: 선이 닿는 쪽(부품 쪽)이 뾰족하다. 테두리는 바깥 단추의 배경,
+ * 안쪽은 같은 모양을 1px 줄여 채운다. 받음(From)은 연한 녹색, 보냄(Goto)은 흰색, 양방향은 양쪽이 뾰족
+ */
+.conn-flag {
+  --tip: 10px;
+  max-width: 100%;
+  padding: 1px;
+  border: none;
+  border-radius: 0;
+  background: #64748b;
+  text-align: left;
+  font-size: 12px;
+}
+.conn-flag {
+  /* 깃발이 너무 넓어지지 않게 (넘치면 띄어쓰기에서 줄바꿈) */
+  max-width: 230px;
+}
+.conn-card.large .conn-flag {
+  --tip: 12px;
+  font-size: 13px;
+  max-width: 300px;
+}
+/* 간이 창 왼쪽: 지금 보는 부품과 잇는 깃발만 진하게 */
+.conn-flag.dim {
+  opacity: 0.35;
+}
+.conn-leaders polyline.dim {
+  opacity: 0.3;
+}
+.conn-flag-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #fff;
+}
+.conn-flag.from .conn-flag-body {
+  background: #ecfdf3;
+}
+.conn-flag.both .conn-flag-body {
+  background: #f1f5f9;
+}
+.conn-flag.left .conn-flag-body {
+  padding-right: calc(var(--tip) + 6px);
+}
+.conn-flag.right .conn-flag-body {
+  padding-left: calc(var(--tip) + 6px);
+}
+.conn-flag.left,
+.conn-flag.left .conn-flag-body {
+  clip-path: polygon(0 0, calc(100% - var(--tip)) 0, 100% 50%, calc(100% - var(--tip)) 100%, 0 100%);
+}
+.conn-flag.right,
+.conn-flag.right .conn-flag-body {
+  clip-path: polygon(var(--tip) 0, 100% 0, 100% 100%, var(--tip) 100%, 0 50%);
+}
+.conn-flag.both.left,
+.conn-flag.both.left .conn-flag-body,
+.conn-flag.both.right,
+.conn-flag.both.right .conn-flag-body {
+  clip-path: polygon(var(--tip) 0, calc(100% - var(--tip)) 0, 100% 50%, calc(100% - var(--tip)) 100%, var(--tip) 100%, 0 50%);
+}
+.conn-flag.both .conn-flag-body {
+  padding-left: calc(var(--tip) + 6px);
+  padding-right: calc(var(--tip) + 6px);
+}
+.conn-flag:hover {
+  background: var(--text);
+}
+.conn-flag.on {
+  background: var(--accent);
+  padding: 2px;
+}
+.conn-flag.on .conn-flag-body {
+  background: #d1fae5;
+}
+.conn-pin {
+  font-family: Consolas, monospace;
+  color: var(--muted);
+}
+.conn-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgb(0 0 0 / 0.25);
+}
+.conn-name {
+  /* 한국어도 띄어쓰기에서만 줄을 바꾼다 (화살표 앞뒤는 붙는 공백). 한 낱말이 칸보다 길 때만 그 안에서 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.conn-arrow {
+  white-space: nowrap;
+}
+.wire-connection {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #ecfdf3;
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- 연결 간이 창 (025) */
+.conn-popup {
+  display: flex;
+  flex-direction: column;
+  width: min(1400px, 96vw);
+  height: 88vh;
+  overflow: hidden;
+  outline: none;
+}
+.conn-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.conn-popup-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.conn-popup .conn-direction {
+  top: 0;
+  margin: 0;
+}
+.conn-popup-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+.conn-popup-pane {
+  overflow: auto;
+  padding: 12px 16px;
+}
+.conn-popup-pane.left {
+  border-right: 1px solid var(--border);
+  background: #fafbfa;
+}
+.conn-popup-nav {
+  position: sticky;
+  top: -12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -12px -16px 12px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.conn-popup-nav select {
+  flex: 1;
+  min-width: 0;
+}
+.conn-popup-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.conn-thumbs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.conn-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+}
+.conn-thumb img {
+  max-width: 140px;
+  max-height: 90px;
+}
+.conn-thumb small {
+  color: var(--muted);
+}
+.conn-thumb:hover {
+  border-color: var(--accent);
 }

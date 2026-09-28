@@ -37,6 +37,8 @@ export default function App() {
   const t = useT()
   const { locale, setLocale } = useLocaleStore()
   const embedAttachments = useSettingsStore((s) => s.embedAttachments)
+  const leftCollapsed = useSettingsStore((s) => s.leftCollapsed)
+  const rightCollapsed = useSettingsStore((s) => s.rightCollapsed)
   const [tab, setTab] = useState<BottomTab>('diagram')
   const [zoom, setZoom] = useState(1)
   const project = useProjectStore((s) => s.project)
@@ -121,7 +123,7 @@ export default function App() {
   ]
 
   return (
-    <div className="app">
+    <div className={['app', leftCollapsed && 'left-collapsed', rightCollapsed && 'right-collapsed'].filter(Boolean).join(' ')}>
       <header className="toolbar">
         <span className="brand">Open Perfboard</span>
         <span className="doc-name" data-testid="doc-name">
@@ -270,9 +272,20 @@ export default function App() {
         </div>
       </header>
 
-      <aside className="panel left">
-        <LibraryPanel />
-      </aside>
+      {/* 양옆 창은 접을 수 있다. 접으면 얇은 띠만 남고 배선도가 그만큼 넓어진다 */}
+      {leftCollapsed ? (
+        <button className="panel-strip left" aria-label={t('부품함 펼치기')} title={t('부품함 펼치기')} onClick={() => useSettingsStore.getState().setLeftCollapsed(false)}>
+          <span aria-hidden>»</span>
+          <span className="panel-strip-text">{t('부품함')}</span>
+        </button>
+      ) : (
+        <aside className="panel left">
+          <button className="panel-collapse" aria-label={t('부품함 접기')} title={t('부품함 접기')} onClick={() => useSettingsStore.getState().setLeftCollapsed(true)}>
+            «
+          </button>
+          <LibraryPanel />
+        </aside>
+      )}
 
       <main className="center">
         {/* 보기 전환: 배선도 / BOM / 결선표 */}
@@ -311,9 +324,19 @@ export default function App() {
         </div>
       </main>
 
-      <aside className="panel right">
-        <PropertiesPanel />
-      </aside>
+      {rightCollapsed ? (
+        <button className="panel-strip right" aria-label={t('선택 항목 펼치기')} title={t('선택 항목 펼치기')} onClick={() => useSettingsStore.getState().setRightCollapsed(false)}>
+          <span aria-hidden>«</span>
+          <span className="panel-strip-text">{t('선택 항목')}</span>
+        </button>
+      ) : (
+        <aside className="panel right">
+          <button className="panel-collapse" aria-label={t('선택 항목 접기')} title={t('선택 항목 접기')} onClick={() => useSettingsStore.getState().setRightCollapsed(true)}>
+            »
+          </button>
+          <PropertiesPanel />
+        </aside>
+      )}
 
       <HelpDialog />
       <BusyOverlay />

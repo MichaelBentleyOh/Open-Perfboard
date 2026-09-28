@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import type { PartDef, Project } from '../../src/core/model'
+import type { PartDef, Project, WireDirection } from '../../src/core/model'
 import { addInstance, connectEnds, emptyProject, routeWires, setMeta, updateInstance } from '../../src/core/ops'
 import { serializePart, serializeProject } from '../../src/core/serialize'
 import { launchApp, makeTempDir, makeUserDataDir, nextFrame, stubDialogs } from '../../tests/e2e/launch'
@@ -31,7 +31,9 @@ function part(o: {
     purchaseUrl: `https://example.com/parts/${o.partNumber.toLowerCase()}`,
     image: { data: svg(o.image), width: o.size[0], height: o.size[1] },
     connectors: o.connectors.map((c) => ({ id: c.id, name: c.name, type: c.type })),
-    pins: o.connectors.flatMap((c) => c.pins.map(([id, number, signal, x, y]) => ({ id, number, signal, connectorId: c.id, x, y })))
+    pins: o.connectors.flatMap((c) =>
+      c.pins.map(([id, number, signal, x, y]) => ({ id, number, signal, connectorId: c.id, x, y }))
+    )
   }
 }
 
@@ -106,23 +108,24 @@ export function demoProject(lang: Lang, omit: string[] = []): Project {
     if (scale !== 1) p = updateInstance(p, id, { scale })
   }
   let n = 0
-  const wire = (a: [string, string], b: [string, string], color: string, extra: { label?: string; awg?: number; length?: number } = {}) => {
+  const wire = (a: [string, string], b: [string, string], color: string, extra: { label?: string; awg?: number; length?: number; direction?: WireDirection } = {}) => {
     if (omit.includes(a[0]) || omit.includes(b[0])) return
     const r = connectEnds(p, { instanceId: a[0], pinId: a[1] }, { instanceId: b[0], pinId: b[1] }, { color, width: extra.awg && extra.awg <= 18 ? 3 : 2, orthogonal: true, ...extra }, () => `w${++n}`)
     if (!r.ok) throw new Error(r.error)
     p = r.project
   }
-  wire(['bt', 'bp'], ['drv', 'vm'], '#e53935', { label: 'VBAT', awg: 18, length: 250 })
+  // 신호 방향(결선표 연결 라벨의 -> / <-): forward = 앞 핀에서 뒤 핀으로
+  wire(['bt', 'bp'], ['drv', 'vm'], '#e53935', { label: 'VBAT', awg: 18, length: 250, direction: 'forward' })
   wire(['bt', 'bn'], ['drv', 'g1'], '#212121', { awg: 18, length: 250 })
-  wire(['drv', 'mp'], ['mot', 'mp'], '#fb8c00', { awg: 20, length: 180 })
-  wire(['drv', 'mn'], ['mot', 'mn'], '#212121', { awg: 20, length: 180 })
-  wire(['mcu', 'p3'], ['drv', 'in1'], '#fdd835', { awg: 26, length: 150 })
-  wire(['mcu', 'p4'], ['drv', 'in2'], '#43a047', { awg: 26, length: 150 })
-  wire(['mcu', 'p5'], ['drv', 'en'], '#1e88e5', { awg: 26, length: 150 })
+  wire(['drv', 'mp'], ['mot', 'mp'], '#fb8c00', { awg: 20, length: 180, direction: 'forward' })
+  wire(['drv', 'mn'], ['mot', 'mn'], '#212121', { awg: 20, length: 180, direction: 'forward' })
+  wire(['mcu', 'p3'], ['drv', 'in1'], '#fdd835', { awg: 26, length: 150, direction: 'forward' })
+  wire(['mcu', 'p4'], ['drv', 'in2'], '#43a047', { awg: 26, length: 150, direction: 'forward' })
+  wire(['mcu', 'p5'], ['drv', 'en'], '#1e88e5', { awg: 26, length: 150, direction: 'forward' })
   wire(['mcu', 'p2'], ['drv', 'g2'], '#212121', { awg: 26, length: 150 })
-  wire(['mcu', 'p1'], ['sen', 'vcc'], '#e53935', { awg: 26, length: 200 })
-  wire(['mcu', 'p6'], ['sen', 'trig'], '#8e24aa', { awg: 26, length: 200 })
-  wire(['mcu', 'p7'], ['sen', 'echo'], '#f5f5f5', { awg: 26, length: 200 })
+  wire(['mcu', 'p1'], ['sen', 'vcc'], '#e53935', { awg: 26, length: 200, direction: 'forward' })
+  wire(['mcu', 'p6'], ['sen', 'trig'], '#8e24aa', { awg: 26, length: 200, direction: 'forward' })
+  wire(['mcu', 'p7'], ['sen', 'echo'], '#f5f5f5', { awg: 26, length: 200, direction: 'reverse' })
   wire(['sen', 'gnd'], ['mcu', 'p2'], '#212121', { awg: 26, length: 200 })
   p = routeWires(p, p.wires.map((w) => w.id))
   return setMeta(p, { author: 'Open Perfboard', notes: tr('예시 배선도 (README 스크린샷)', lang) })

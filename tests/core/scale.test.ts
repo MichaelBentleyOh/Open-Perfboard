@@ -5,6 +5,7 @@ import { crossingWires } from '@core/avoid'
 import { endPosition } from '@core/ends'
 import { findCrossings } from '@core/crossing'
 import { buildNetlist } from '@core/netlist'
+import { buildConnectionLabels, labelsByInstance } from '@core/connection'
 import { routeWires } from '@core/ops'
 import { sceneWires } from '@core/scene'
 import { selectInRect } from '@core/selection'
@@ -13,26 +14,31 @@ import type { Project } from '@core/model'
 import { wirePath } from '@core/wire'
 import { synthProject } from '../perf/synth'
 
-/** 여러 번 돌려 가장 빠른 시간 (다른 일로 느려진 측정을 버린다) */
-function fastest(fn: () => unknown, runs = 5): number {
-  let best = Infinity
-  for (let i = 0; i < runs; i++) {
-    const t = performance.now()
-    fn()
-    best = Math.min(best, performance.now() - t)
-  }
-  return best
+const time = (fn: () => unknown): number => {
+  const t = performance.now()
+  fn()
+  return performance.now() - t
 }
 
-/** 작은 배선도 대비 4배 배선도의 시간 배수 */
-function growth(small: number, op: (p: Project) => () => unknown, runs?: number): number {
+/**
+ * 작은 배선도 대비 4배 배선도의 시간 배수.
+ * 다른 테스트 파일이 동시에 돌면 CPU를 나눠 쓰므로, 작은 것·큰 것을 바로 이어 재서 같은 부하에서 비교하고
+ * 그 배수들의 가운데 값을 쓴다 (한쪽만 느려진 측정에 끌려가지 않게)
+ */
+function growth(small: number, op: (p: Project) => () => unknown, runs = 7): number {
   const a = synthProject({ wires: small, imageBytes: 10 })
   const b = synthProject({ wires: small * 4, imageBytes: 10 })
   const fa = op(a)
   const fb = op(b)
   fa() // 준비 운동 (JIT)
   fb()
-  return fastest(fb, runs) / fastest(fa, runs)
+  const ratios: number[] = []
+  for (let i = 0; i < runs; i++) {
+    const ta = time(fa)
+    ratios.push(time(fb) / ta)
+  }
+  ratios.sort((x, y) => x - y)
+  return ratios[Math.floor(ratios.length / 2)]
 }
 
 /** 4배 크기에서 선형이면 약 4, 제곱이면 약 16. 측정 흔들림을 감안해 10 미만이면 통과 */
@@ -63,6 +69,10 @@ describe('큰 배선도: 전선 수에 비례해서만 느려진다', () => {
 
   it('결선표', () => {
     expect(growth(1000, (p) => () => buildNetlist(p))).toBeLessThan(LINEAR_ENOUGH)
+  })
+
+  it('결선표 연결 라벨', () => {
+    expect(growth(1000, (p) => () => labelsByInstance(buildConnectionLabels(p)))).toBeLessThan(LINEAR_ENOUGH)
   })
 
   it('파일 열기(검증 포함)', () => {

@@ -26,17 +26,24 @@
 
 ## Features
 
-- **Pins on photos**: click terminals on a part photo to add pins; attach datasheet PDFs
+- **Pins on photos**: click terminals on a part photo to add pins, draw guide lines to space pins evenly or snap them onto a line; attach datasheet PDFs
 - **Pin-to-pin wiring**: orthogonal routing, branches, crossing hops. Wires never run across parts
-- **Wire list and BOM, generated as you draw**: wire color, gauge, length; unit prices, totals, purchase links
+- **Wire list and BOM, generated as you draw**: wire color (8 presets + RGB spectrum / typed values), gauge, length; unit prices, totals, purchase links
+- **Connection labels**: name tags like `Control board -> IMU : SDA` instead of lines show where and how each pin connects (Simulink Goto/From style). Signal directions are set per wire in the netlist; click a part to flip through the parts connected to it
 - **Export**: PDF report, Excel / CSV, PNG
-- **Also**: autosave and recovery, parts bin sharing (`.opblib`), Korean / English, no limit on parts or wires
+- **Also**: collapsible side panels, autosave and recovery, parts bin sharing (`.opblib`), Korean / English, no limit on parts or wires
 
 | Part editor | Wire specs |
 | --- | --- |
 | ![Part editor: pins placed per connector on a part photo](images/part-editor-en.png) | ![Selected wire: gauge, length, color, label](images/wire-en.png) |
 | **Bill of materials (BOM)** | **Wire list** |
 | ![BOM: ref, name, part no., quantity, unit price, amount, purchase link](images/bom-en.png) | ![Wire list: from/to pins, signals, color, gauge, length](images/netlist-en.png) |
+
+**Netlist connection labels**: like Simulink Goto/From, a line runs from each pin on the part photo to a name tag. Tags with the same name are connected, and arrows show the signal direction. Click a tag to see its pair and the wire details, and change the signal direction (`->` `<-` `<->`) in the bar above. Click a part photo or **Connections** to open a popup: the part on the left, and its connected parts on the right, one at a time (◀ ▶ or the list).
+
+![Netlist connection labels: name tags linked to each pin on the part photo, the selected tag and its wire details](images/labels-en.png)
+
+![Connection popup: the control board on the left, the connected motor driver on the right](images/labels-popup-en.png)
 
 ## Install
 
@@ -93,6 +100,8 @@ npm run check       # type check + unit tests
 npm run test:e2e    # end-to-end tests
 npm run dist:win    # build the installer → dist/
 ```
+
+> If PowerShell (the default VS Code terminal) says `npm.ps1 cannot be loaded because running scripts is disabled`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and open a new terminal. To leave the setting alone, use `npm.cmd` instead of `npm`.
 
 ## License
 

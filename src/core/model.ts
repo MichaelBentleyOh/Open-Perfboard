@@ -1,7 +1,7 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
 /** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 */
-export const PROJECT_FILE_VERSION = 5
+export const PROJECT_FILE_VERSION = 6
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -111,7 +111,12 @@ export interface Wire {
   awg?: number
   /** 실제 전선 길이 (mm) */
   length?: number
+  /** 신호 방향 (025): forward = from → to, reverse = to → from, 없으면 양방향. 결선표에서만 바꾼다 */
+  direction?: WireDirection
 }
+
+export type WireDirection = 'forward' | 'reverse'
+export const WIRE_DIRECTIONS: readonly WireDirection[] = ['forward', 'reverse']
 
 /** 전선 규격으로 고를 수 있는 AWG */
 export const AWG_MIN = 10
