@@ -5,7 +5,7 @@ import { grant, isGranted } from './grants'
 import { mt } from './locale'
 import { recentFile, recoveryDir } from './paths'
 import { addRecent, clearRecent, isRecent, listRecent, removeRecent } from './repositories/recent'
-import { PROJECT_EXT, readProjectFile } from './repositories/project'
+import { BUNDLE_EXT, PROJECT_EXT, readProjectFile, type ProjectContent } from './repositories/project'
 import { clearRecovery, clearRecoverySync, listRecovery, readRecovery, RECOVERY_ID, writeRecovery } from './repositories/recovery'
 
 /** 이번 실행의 복구 사본 id */
@@ -13,7 +13,7 @@ const SESSION_ID = randomUUID().replace(/-/g, '')
 /** 기본 자동 저장 간격. E2E는 OPB_AUTOSAVE_MS로 줄인다 */
 const AUTOSAVE_MS = Number(process.env['OPB_AUTOSAVE_MS']) || 60_000
 
-export type OpenFilePayload = { path: string; content: string } | { path: string; error: string }
+export type OpenFilePayload = { path: string; content: ProjectContent } | { path: string; error: string }
 
 function assertString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string') throw new Error(`${name}: 문자열이어야 합니다`)
@@ -21,7 +21,7 @@ function assertString(v: unknown, name: string): asserts v is string {
 
 /** 명령줄 인자 중 배선도 파일 (파일 연결로 실행하면 경로가 인자로 온다) */
 export function projectArg(argv: readonly string[]): string | undefined {
-  return [...argv].reverse().find((a) => !a.startsWith('-') && a.toLowerCase().endsWith(PROJECT_EXT))
+  return [...argv].reverse().find((a) => !a.startsWith('-') && [PROJECT_EXT, BUNDLE_EXT].some((ext) => a.toLowerCase().endsWith(ext)))
 }
 
 /** 사용자가 파일 연결·최근 파일로 연 경로: 권한을 주고 읽는다 */

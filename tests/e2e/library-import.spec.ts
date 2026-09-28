@@ -84,5 +84,5 @@ test('부품 가져오기(묶음·배선도) → 충돌 선택 → 내보내기'
     await app.close()
   }
   // 라이브러리 폴더에 실제 파일로 저장됐다
-  expect(readdirSync(join(userData, 'library'))).toHaveLength(5)
+  expect(readdirSync(join(userData, 'library')).filter((f) => f.endsWith('.json'))).toHaveLength(5)
 })

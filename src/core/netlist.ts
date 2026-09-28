@@ -21,8 +21,13 @@ export interface NetlistRow {
   label?: string
   /** 전선 규격 (AWG) */
   awg?: number
-  /** 전선 길이 (mm) */
-  length?: number
+  /** 전선 메모 */
+  memo?: string
+  /** 전선 종류 이름 (027 부속 부품) */
+  wireType?: string
+  /** 수축 튜브 이름: 양 끝 / 중간 (027) */
+  tubeEnds?: string
+  tubeMiddle?: string
   /** 이 행의 시작 → 끝 기준 신호 방향 */
   arrow: Arrow
   /** 행의 시작이 전선의 to 쪽이다 (정렬하느라 뒤집었다) → 방향을 바꿀 때 되돌린다 */
@@ -72,7 +77,13 @@ export function buildNetlist(project: Project): NetlistRow[] {
       const reversed = naturalCompare(from.label, to.label) > 0
       if (reversed) [from, to] = [to, from]
       const arrow = reversed ? REVERSED_ARROW[wireArrow(w)] : wireArrow(w)
-      return { wireId: w.id, from, to, color: w.color, label: w.label, awg: w.awg, length: w.length, arrow, reversed }
+      const name = (id?: string) => (id ? project.supplies?.[id]?.name : undefined)
+      return {
+        wireId: w.id, from, to, color: w.color, label: w.label, awg: w.awg, memo: w.memo, arrow, reversed,
+        wireType: name(w.supplyId),
+        tubeEnds: name(w.tubes?.ends),
+        tubeMiddle: name(w.tubes?.middle)
+      }
     })
     .sort((a, b) => naturalCompare(a.from.label, b.from.label) || naturalCompare(a.to.label, b.to.label))
 }
@@ -88,6 +99,9 @@ export const NETLIST_COLUMNS: CsvColumn<NetlistRow>[] = [
   { header: msg('끝 신호'), value: (r) => r.to.signal },
   { header: msg('색상'), value: (r) => r.color },
   { header: msg('규격(AWG)'), value: (r) => r.awg },
-  { header: msg('길이(mm)'), value: (r) => r.length },
-  { header: msg('라벨'), value: (r) => r.label }
+  { header: msg('전선 종류'), value: (r) => r.wireType },
+  { header: msg('끝 튜브'), value: (r) => r.tubeEnds },
+  { header: msg('중간 튜브'), value: (r) => r.tubeMiddle },
+  { header: msg('라벨'), value: (r) => r.label },
+  { header: msg('메모'), value: (r) => r.memo }
 ]

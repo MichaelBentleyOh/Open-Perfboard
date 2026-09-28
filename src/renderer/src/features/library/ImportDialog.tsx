@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { nanoid } from 'nanoid'
 import { importSummary, resolveImport, type ConflictChoice, type ImportEntry } from '@core/library'
-import type { PartDef } from '@core/model'
+import type { PartDef, Supply } from '@core/model'
 import type { ImportRequest } from '@/stores/uiStore'
 import { useT } from '@/i18n'
 import { msg } from '@core/i18n'
@@ -11,7 +11,7 @@ export type { ImportRequest }
 interface Props {
   request: ImportRequest
   onCancel: () => void
-  onImport: (parts: PartDef[]) => Promise<void>
+  onImport: (parts: PartDef[], supplies: Supply[]) => Promise<void>
 }
 
 const STATUS_TEXT: Record<ImportEntry['status'], string> = {
@@ -26,8 +26,12 @@ export function ImportDialog({ request, onCancel, onImport }: Props) {
   const { plan, problems, files, note } = request
   const [choice, setChoice] = useState<ConflictChoice>('copy')
   const [busy, setBusy] = useState(false)
+  const supplyPlan = request.supplyPlan ?? []
   const summary = importSummary(plan)
+  const supplySummary = importSummary(supplyPlan)
   const count = resolveImport(plan, choice, () => 'x').length
+  const supplyCount = resolveImport(supplyPlan, choice, () => 'x').length
+  const changed = summary.changed + supplySummary.changed
 
   return (
     <div className="modal-backdrop">
@@ -44,6 +48,11 @@ export function ImportDialog({ request, onCancel, onImport }: Props) {
             <span className="chip changed">{t('내용 다름 {n}', { n: summary.changed })}</span>
             {problems.length > 0 && <span className="chip bad">{t('읽지 못함 {n}', { n: problems.length })}</span>}
           </div>
+          {supplyPlan.length > 0 && (
+            <p className="hint-text" data-testid="import-supplies">
+              {t('부속 부품: 새 {new} · 이미 있음 {same} · 내용 다름 {changed}', supplySummary)}
+            </p>
+          )}
 
           {plan.length > 0 && (
             <ul className="import-list">
@@ -63,9 +72,9 @@ export function ImportDialog({ request, onCancel, onImport }: Props) {
             </ul>
           )}
 
-          {summary.changed > 0 && (
+          {changed > 0 && (
             <fieldset className="conflict">
-              <legend>{t('내용이 다른 같은 부품 {n}개', { n: summary.changed })}</legend>
+              <legend>{t('내용이 다른 같은 부품 {n}개', { n: changed })}</legend>
               <label>
                 <input type="radio" name="conflict" checked={choice === 'copy'} onChange={() => setChoice('copy')} /> {t('사본으로 추가 (둘 다 유지)')}
               </label>
@@ -91,18 +100,18 @@ export function ImportDialog({ request, onCancel, onImport }: Props) {
         <footer className="modal-footer">
           <div className="messages" />
           <button onClick={onCancel} disabled={busy}>
-            {count === 0 ? t('닫기') : t('취소')}
+            {count + supplyCount === 0 ? t('닫기') : t('취소')}
           </button>
-          {count > 0 && (
+          {count + supplyCount > 0 && (
             <button
               className="primary"
               disabled={busy}
               onClick={async () => {
                 setBusy(true)
-                await onImport(resolveImport(plan, choice, () => nanoid(), t))
+                await onImport(resolveImport(plan, choice, () => nanoid(), t), resolveImport(supplyPlan, choice, () => nanoid(), t))
               }}
             >
-              {busy ? t('가져오는 중…') : t('가져오기 ({n}개)', { n: count })}
+              {busy ? t('가져오는 중…') : t('가져오기 ({n}개)', { n: count + supplyCount })}
             </button>
           )}
         </footer>

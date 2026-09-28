@@ -12,6 +12,8 @@ interface Props<T> {
   empty: string
   onExport: () => void
   summary?: string
+  /** 제목 옆에 둘 것 (배선도 범위 고르기 등) */
+  tools?: ReactNode
 }
 
 /** 행이 이보다 많으면 보이는 행만 그린다 (수천 행도 바로 뜨게) */
@@ -56,7 +58,7 @@ function useVisibleRows(bodyRef: React.RefObject<HTMLTableSectionElement | null>
 }
 
 /** CSV 내보내기와 같은 열 정의로 표를 그린다 → 화면과 파일 내용이 항상 같다 */
-export function ReportTable<T>({ title, rows, columns, render, rowKey, empty, onExport, summary }: Props<T>) {
+export function ReportTable<T>({ title, rows, columns, render, rowKey, empty, onExport, summary, tools }: Props<T>) {
   const t = useT()
   const bodyRef = useRef<HTMLTableSectionElement>(null)
   const virtual = rows.length > VIRTUAL_FROM
@@ -71,6 +73,7 @@ export function ReportTable<T>({ title, rows, columns, render, rowKey, empty, on
     <section className="report" aria-label={title}>
       <header className="report-header">
         <h2>{title}</h2>
+        {tools}
         {summary && <span className="report-summary">{summary}</span>}
         <div className="spacer" />
         <button onClick={onExport} disabled={rows.length === 0}>

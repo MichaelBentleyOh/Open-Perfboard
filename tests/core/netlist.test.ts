@@ -23,10 +23,10 @@ describe('buildNetlist', () => {
     expect(buildNetlist(r.project).map((x) => [x.from.label, x.to.label])).toEqual([['U1.1', 'U2.2']])
   })
 
-  it('CSV로 내보낼 수 있다 (규격·길이는 없으면 빈 칸)', () => {
+  it('CSV로 내보낼 수 있다 (규격·메모는 없으면 빈 칸)', () => {
     const csv = toCsv(buildNetlist(loadSample()), NETLIST_COLUMNS)
-    expect(csv.split('\r\n')[0]).toBe('﻿시작,시작 신호,방향,끝,끝 신호,색상,규격(AWG),길이(mm),라벨')
-    expect(csv).toContain('CN1.P1.+,+12V,↔,U1.J1.1,VIN,#e53935,,,+12V')
+    expect(csv.split('\r\n')[0]).toBe('﻿시작,시작 신호,방향,끝,끝 신호,색상,규격(AWG),전선 종류,끝 튜브,중간 튜브,라벨,메모')
+    expect(csv).toContain('CN1.P1.+,+12V,↔,U1.J1.1,VIN,#e53935,,,,,+12V,')
   })
 
   it('방향은 파일에 → ← ↔ 로 쓴다 (-로 시작하면 엑셀이 수식으로 읽는다)', () => {
@@ -36,9 +36,9 @@ describe('buildNetlist', () => {
     expect(csv).toMatch(/,[→←],/)
   })
 
-  it('전선 규격(AWG)·길이(mm)가 결선표에 나온다', () => {
-    const p = updateWires(loadSample(), ['w1'], { awg: 22, length: 350 })
+  it('전선 규격(AWG)·메모가 결선표에 나온다', () => {
+    const p = updateWires(loadSample(), ['w1'], { awg: 22, memo: 'L=350 mm' })
     const csv = toCsv(buildNetlist(p), NETLIST_COLUMNS)
-    expect(csv).toContain(',22,350,')
+    expect(csv).toContain(',22,,,,+12V,L=350 mm')
   })
 })

@@ -18,7 +18,7 @@ async function shootAll(lang: Lang) {
     await selectBoard(win)
     await shot(win, `main${suffix}`)
 
-    // 2. 전선 선택: 규격·길이
+    // 2. 전선 선택: 규격·메모
     await win.keyboard.press('Escape')
     const path = (await win.evaluate(() => window.__opbCanvas!.wirePathClient('w1')))!
     const [a, b] = [path[0], path[1]]

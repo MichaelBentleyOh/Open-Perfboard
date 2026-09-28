@@ -15,7 +15,7 @@ const B = makePart('b', { name: '서보' })
 describe('readLibraryFile', () => {
   it('라이브러리 묶음 왕복', () => {
     const r = readLibraryFile(serializeLibrary([A, B]), 'my.opblib')
-    expect(r).toEqual({ parts: [A, B], problems: [], kind: 'library', attachmentData: {} })
+    expect(r).toEqual({ parts: [A, B], problems: [], kind: 'library', attachmentData: {}, supplies: [] })
   })
 
   it('묶음 안의 잘못된 부품만 건너뛰고 이유를 알린다', () => {

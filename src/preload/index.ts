@@ -13,7 +13,9 @@ export interface RecoveryEntry {
   size: number
 }
 /** 파일 연결·최근 파일로 연 파일. 읽지 못했으면 error */
-export type OpenFilePayload = { path: string; content: string } | { path: string; error: string }
+/** 배선도 파일 내용: .opb는 문자열, 여러 배선도 묶음 .zip은 바이트 (030) */
+export type ProjectContent = string | Uint8Array
+export type OpenFilePayload = { path: string; content: ProjectContent } | { path: string; error: string }
 
 // 렌더러에 노출하는 API. 채널을 추가하면 main/ipc.ts에도 핸들러를 추가한다.
 const api = {
@@ -26,11 +28,18 @@ const api = {
     /** 가져올 파일 고르기 (여러 개). 취소하면 빈 배열 */
     pickFiles: (): Promise<{ name: string; content: string }[]> => ipcRenderer.invoke('library:pick-files')
   },
+  supplies: {
+    /** 부속 부품 JSON 문자열 목록 (027) */
+    list: (): Promise<string[]> => ipcRenderer.invoke('supplies:list'),
+    save: (id: string, content: string): Promise<void> => ipcRenderer.invoke('supplies:save', id, content),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('supplies:remove', id)
+  },
   project: {
     /** 열기 대화상자 + 읽기. 취소하면 null */
-    open: (): Promise<{ path: string; content: string } | null> => ipcRenderer.invoke('project:open'),
+    open: (): Promise<{ path: string; content: ProjectContent } | null> => ipcRenderer.invoke('project:open'),
     /** path가 null이면 다른 이름으로 저장. 저장된 경로, 취소하면 null */
-    save: (path: string | null, content: string, suggestedName: string): Promise<string | null> =>
+    /** content: 문자열 = .opb, 바이트 = .zip */
+    save: (path: string | null, content: ProjectContent, suggestedName: string): Promise<string | null> =>
       ipcRenderer.invoke('project:save', path, content, suggestedName)
   },
   recent: {

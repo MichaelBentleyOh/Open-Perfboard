@@ -161,8 +161,9 @@ export function finalizeDraft(draft: PartDraft): PartDef | undefined {
     pins: draft.pins.map((p) => ({ ...p, number: p.number.trim() }))
   }
   if (draft.unitPrice !== undefined) part.unitPrice = draft.unitPrice
+  if (draft.currency && draft.currency !== 'KRW') part.currency = draft.currency
   if (draft.attachments?.length) part.attachments = draft.attachments.map((a) => ({ ...a, name: a.name.trim() || a.name }))
-  for (const key of ['partNumber', 'manufacturer', 'memo', 'refPrefix', 'purchaseUrl'] as const) {
+  for (const key of ['partNumber', 'manufacturer', 'memo', 'refPrefix', 'purchaseUrl', 'supplier'] as const) {
     const v = opt(draft[key])
     if (v) part[key] = v
   }

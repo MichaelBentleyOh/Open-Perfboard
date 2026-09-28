@@ -8,7 +8,7 @@ async function commit(input: Locator, value: string) {
   await input.press('Enter')
 }
 
-test('속성 창에서 부품 스펙·전선 규격/길이 편집 → BOM·결선표 반영, 라이브러리 반영, 실행 취소', async () => {
+test('속성 창에서 부품 스펙·전선 규격/메모 편집 → BOM·결선표 반영, 라이브러리 반영, 실행 취소', async () => {
   const userData = makeUserDataDir()
   const out = makeTempDir('opb-spec-')
   seedLibrary(userData)
@@ -66,26 +66,26 @@ test('속성 창에서 부품 스펙·전선 규격/길이 편집 → BOM·결�
     await expect(win.getByTestId('part-list')).toContainText('메인 보드')
     await expect(props.getByTestId('library-differs')).toHaveCount(0)
 
-    // 5. 전선 선택 → 규격 22 AWG, 길이 350 mm → 결선표·CSV
+    // 5. 전선 선택 → 규격 22 AWG, 메모(길이 등) → 결선표·CSV
     await setMode(win, 'select')
     const wire = (await getProject(win)).wires[0]
     const path = (await win.evaluate((id) => window.__opbCanvas!.wirePathClient(id), wire.id))!
     await win.mouse.click((path[0].x + path[1].x) / 2, (path[0].y + path[1].y) / 2)
     const wp = win.getByTestId('props-wire')
     await wp.getByLabel('규격(AWG)').selectOption('22')
-    await commit(wp.getByLabel('길이(mm)'), '350')
-    expect((await getProject(win)).wires[0]).toMatchObject({ awg: 22, length: 350 })
+    await commit(wp.getByLabel('전선 메모'), 'L=350 mm')
+    expect((await getProject(win)).wires[0]).toMatchObject({ awg: 22, memo: 'L=350 mm' })
     await win.screenshot({ path: 'test-results/spec-wire.png' })
     await win.getByRole('button', { name: /^결선표/ }).click()
     const net = win.getByRole('region', { name: '결선표' })
     await expect(net.getByRole('columnheader', { name: '규격(AWG)' })).toBeVisible()
     await expect(net.locator('tbody tr').first()).toContainText('22')
-    await expect(net.locator('tbody tr').first()).toContainText('350')
+    await expect(net.locator('tbody tr').first()).toContainText('L=350 mm')
     const csvPath = join(out, 'net.csv')
     await stubDialogs(app, { save: csvPath })
     await net.getByRole('button', { name: 'CSV 내보내기' }).click()
     await expect(win.getByRole('status')).toContainText('내보냈습니다')
-    expect(readFileSync(csvPath, 'utf8')).toContain(',22,350,')
+    expect(readFileSync(csvPath, 'utf8')).toContain(',22,,,,')
   } finally {
     await app.close()
   }

@@ -26,7 +26,7 @@ test('복사·붙여넣기(마우스 위치)·연속 붙여넣기·잘라내기�
     expect(p.instances.map((i) => i.refDes)).toEqual(['U1', 'U2', 'U3', 'U4'])
     expect(p.wires).toHaveLength(2)
     const [u3, u4] = p.instances.slice(2).map((i) => i.id)
-    expect(await selection(win)).toEqual({ instances: [u3, u4], wires: [p.wires[1].id], junctions: [] }) // 붙여넣은 것이 선택됨
+    expect(await selection(win)).toEqual({ instances: [u3, u4], wires: [p.wires[1].id], junctions: [], notes: [] }) // 붙여넣은 것이 선택됨
     // 새 전선은 새 부품끼리 연결
     expect([(p.wires[1].from as { instanceId: string }).instanceId, (p.wires[1].to as { instanceId: string }).instanceId].sort()).toEqual([u3, u4].sort())
     // 붙여넣은 묶음의 가운데가 마우스 위치

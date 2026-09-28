@@ -10,7 +10,8 @@ import { routeWires } from '@core/ops'
 import { sceneWires } from '@core/scene'
 import { selectInRect } from '@core/selection'
 import { parseProjectFile, serializeProject } from '@core/serialize'
-import type { Project } from '@core/model'
+import type { Project, Supply } from '@core/model'
+import { supplyUsage } from '@core/supply'
 import { wirePath } from '@core/wire'
 import { synthProject } from '../perf/synth'
 
@@ -73,6 +74,23 @@ describe('큰 배선도: 전선 수에 비례해서만 느려진다', () => {
 
   it('결선표 연결 라벨', () => {
     expect(growth(1000, (p) => () => labelsByInstance(buildConnectionLabels(p)))).toBeLessThan(LINEAR_ENOUGH)
+  })
+
+  it('부속 부품 제안 수량 (모든 핀이 커넥터에 속함)', () => {
+    const lib: Supply[] = [
+      { id: 't', kind: 'terminal', name: 'T' },
+      { id: 'h', kind: 'housing', name: 'H', connectorType: 'XH', terminalId: 't' }
+    ]
+    const withConnectors = (p: Project): Project => ({
+      ...p,
+      parts: Object.fromEntries(
+        Object.entries(p.parts).map(([id, d]) => [
+          id,
+          { ...d, connectors: [{ id: 'j', name: 'J1', type: 'XH' }], pins: d.pins.map((pin) => ({ ...pin, connectorId: 'j' })) }
+        ])
+      )
+    })
+    expect(growth(1000, (p) => { const q = withConnectors(p); return () => supplyUsage(q, lib) })).toBeLessThan(LINEAR_ENOUGH)
   })
 
   it('파일 열기(검증 포함)', () => {

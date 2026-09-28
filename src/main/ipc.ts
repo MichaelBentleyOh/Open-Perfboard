@@ -3,11 +3,11 @@
 import { BrowserWindow, dialog, ipcMain, shell, type FileFilter, type IpcMainInvokeEvent } from 'electron'
 import { basename } from 'node:path'
 import { registerCloseGuardIpc } from './closeGuard'
-import { libraryDir, recentFile } from './paths'
+import { libraryDir, recentFile, suppliesDir } from './paths'
 import { grant, isGranted } from './grants'
 import { addRecent } from './repositories/recent'
 import { listParts, removePart, savePart } from './repositories/library'
-import { PROJECT_EXT, readProjectFile, writeExportFile, writeProjectFile } from './repositories/project'
+import { BUNDLE_EXT, PROJECT_EXT, readProjectFile, writeExportFile, writeProjectFile } from './repositories/project'
 import { renderPdf } from './pdf'
 import { mt, registerLocaleIpc } from './locale'
 
@@ -16,6 +16,10 @@ function assertString(v: unknown, name: string): asserts v is string {
 }
 
 const projectFilter = () => ({ name: mt('Open Perfboard 배선도'), extensions: [PROJECT_EXT.slice(1)] })
+/** 여러 배선도 묶음 (.zip, 030) */
+const bundleFilter = () => ({ name: mt('Open Perfboard 배선도 묶음'), extensions: [BUNDLE_EXT.slice(1)] })
+/** 열기: .opb와 .zip 둘 다 */
+const openFilter = () => ({ name: mt('Open Perfboard 배선도 (.opb, .zip)'), extensions: [PROJECT_EXT.slice(1), BUNDLE_EXT.slice(1)] })
 
 type ExportKind = 'csv' | 'xlsx' | 'png' | 'opblib'
 /** 필터 이름은 원문(한국어), 대화상자를 띄울 때 번역 */
@@ -46,6 +50,20 @@ export function registerIpc(): void {
     return removePart(libraryDir(), id)
   })
 
+  // ---- 부속 부품 (027): 부품과 같은 저장 규칙, 폴더만 다르다
+  ipcMain.handle('supplies:list', () => listParts(suppliesDir()))
+
+  ipcMain.handle('supplies:save', (_e, id: unknown, content: unknown) => {
+    assertString(id, 'id')
+    assertString(content, 'content')
+    return savePart(suppliesDir(), id, content)
+  })
+
+  ipcMain.handle('supplies:remove', (_e, id: unknown) => {
+    assertString(id, 'id')
+    return removePart(suppliesDir(), id)
+  })
+
   /** 부품 가져오기: 여러 파일을 골라 내용을 돌려준다 (해석·검증은 렌더러의 core) */
   ipcMain.handle('library:pick-files', async (e) => {
     const win = windowOf(e)
@@ -59,13 +77,19 @@ export function registerIpc(): void {
     }
     const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     if (r.canceled) return []
-    return Promise.all(r.filePaths.map(async (p) => ({ name: basename(p), content: await readProjectFile(p) })))
+    return Promise.all(
+      r.filePaths.map(async (p) => {
+        const content = await readProjectFile(p)
+        // 부품 가져오기는 글자 파일만 (묶음 .zip은 배선도 열기로)
+        return { name: basename(p), content: typeof content === 'string' ? content : '' }
+      })
+    )
   })
 
   // ---- 프로젝트 파일
   ipcMain.handle('project:open', async (e) => {
     const win = windowOf(e)
-    const opts = { title: mt('배선도 열기'), filters: [projectFilter()], properties: ['openFile' as const] }
+    const opts = { title: mt('배선도 열기'), filters: [openFilter(), projectFilter(), bundleFilter()], properties: ['openFile' as const] }
     const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     if (r.canceled || !r.filePaths[0]) return null
     const path = grant(r.filePaths[0])
@@ -75,13 +99,19 @@ export function registerIpc(): void {
   })
 
   /** path가 null이면 "다른 이름으로 저장" 대화상자를 띄운다. 취소하면 null */
+  /** content: 문자열 = .opb (배선도 하나), 바이트 = .zip (여러 배선도 묶음) */
   ipcMain.handle('project:save', async (e, path: unknown, content: unknown, suggestedName: unknown) => {
-    assertString(content, 'content')
+    if (typeof content !== 'string' && !(content instanceof Uint8Array)) throw new Error('content: 문자열 또는 바이트')
+    const bundle = typeof content !== 'string'
     let target: string
     if (path === null) {
       assertString(suggestedName, 'suggestedName')
       const win = windowOf(e)
-      const opts = { title: mt('배선도 저장'), defaultPath: `${safeFileName(suggestedName)}${PROJECT_EXT}`, filters: [projectFilter()] }
+      const opts = {
+        title: mt('배선도 저장'),
+        defaultPath: `${safeFileName(suggestedName)}${bundle ? BUNDLE_EXT : PROJECT_EXT}`,
+        filters: [bundle ? bundleFilter() : projectFilter()]
+      }
       const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
       if (r.canceled || !r.filePath) return null
       target = r.filePath

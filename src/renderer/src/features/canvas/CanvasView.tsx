@@ -1,17 +1,20 @@
 import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Circle, Group, Image as KImage, Label, Layer, Line, Rect, Shape, Stage, Tag, Text } from 'react-konva'
 import Konva from 'konva'
-import type { Junction, PartDef, PartInstance, Project, Wire } from '@core/model'
-import { instanceBounds, partSize, pinWorldPosition, rectContainsPoint, rectFromPoints, rectsIntersect, type Point, type Rect as WorldRect } from '@core/geometry'
+import type { Junction, Note, PartDef, PartInstance, Project, Wire } from '@core/model'
+import { NOTE_DEFAULT_COLOR, NOTE_PADDING, noteFont, resizedNote } from '@core/note'
+import { instanceBounds, partSize, pinWorldPosition, rectContainsPoint, rectFromPoints, rectsIntersect, snapTo, type Point, type Rect as WorldRect } from '@core/geometry'
 import { endPosition, findJunction, isPinEnd } from '@core/ends'
-import { isSplitTarget, type WireTarget } from '@core/ops'
+import { clampScale, isSplitTarget, type WireTarget } from '@core/ops'
 import { hopDrawOps, type DrawOp, type Hop } from '@core/crossing'
 import { junctionColors, sceneWires, wireShape, wiresTouching, type SceneWires, type WireShape } from '@core/scene'
 import { mergeSelection, selectInRect } from '@core/selection'
 import { flatten, nearestSegment, pathMidpoint, projectOnPath, snapPoint, wirePath } from '@core/wire'
 import { useProjectStore } from '@/stores/projectStore'
-import { useUiStore } from '@/stores/uiStore'
+import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { selectionCount, useUiStore } from '@/stores/uiStore'
 import { useLibraryStore } from '@/stores/libraryStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { loadHtmlImage } from '@/features/part-editor/image'
 import { connectorColor } from '@/features/part-editor/PinCanvas'
 import { registerCanvasExporter } from './canvasExport'
@@ -43,6 +46,8 @@ const NO_IDS: ReadonlySet<string> = new Set()
 interface GroupDrag {
   ids: Set<string>
   junctions: Set<string>
+  /** 함께 옮기는 글 상자 (032) */
+  notes: Set<string>
   dx: number
   dy: number
 }
@@ -54,7 +59,7 @@ interface Band {
   additive: boolean
 }
 
-type ItemKind = 'instance' | 'wire' | 'junction'
+type ItemKind = 'instance' | 'wire' | 'junction' | 'note'
 type KMouse = Konva.KonvaEventObject<MouseEvent>
 type KDrag = Konva.KonvaEventObject<DragEvent>
 
@@ -85,6 +90,10 @@ interface CanvasApi {
   junctionDragMove: (id: string, e: KDrag) => void
   junctionDragEnd: () => void
   junctionEnter: (id: string, e: KMouse) => void
+  noteDragStart: (note: Note) => void
+  noteDragMove: (note: Note, e: KDrag) => void
+  noteDragEnd: (note: Note, e: KDrag) => void
+  noteDblClick: (note: Note, e: KMouse) => void
 }
 type Api = RefObject<CanvasApi>
 
@@ -142,6 +151,33 @@ const isTyping = (t: EventTarget | null) =>
 const targetKey = (t: WireTarget | null) =>
   !t ? '' : isSplitTarget(t) ? `w:${t.wireId}` : isPinEnd(t) ? `p:${t.instanceId}:${t.pinId}` : `j:${t.junctionId}`
 
+/** 크기 손잡이 대상 (034): 이 점(anchor)을 그대로 두고 손잡이 쪽으로 늘리고 줄인다 */
+interface ResizeTarget {
+  items: { instances?: string[]; notes?: string[] }
+  anchor: Point
+  rect: WorldRect
+  corners: Point[]
+  /** 원하는 비율 → 범위 안에서 실제로 되는 비율 */
+  limit: (factor: number) => number
+}
+/** 손잡이 크기 (화면 px) */
+const RESIZE_HANDLE = 9
+
+/** 글 상자의 실제 크기 (Konva가 줄을 바꿔 그린 높이) */
+function noteSize(n: Note): { width: number; height: number } {
+  const text = new Konva.Text({ text: n.text || ' ', width: n.width, padding: NOTE_PADDING, fontSize: noteFont(n), lineHeight: 1.3, wrap: 'char' })
+  const height = text.height()
+  text.destroy()
+  return { width: n.width, height }
+}
+
+const scaleRect = (r: WorldRect, a: Point, f: number): WorldRect => ({
+  x: a.x + (r.x - a.x) * f,
+  y: a.y + (r.y - a.y) * f,
+  width: r.width * f,
+  height: r.height * f
+})
+
 const setCursor = (e: KMouse, cursor: string) => {
   e.target.getStage()!.container().style.cursor = cursor
 }
@@ -167,7 +203,7 @@ export function CanvasView({ onZoomChange }: Props) {
   const [renderAll, setRenderAll] = useState(false)
   const [drag, setDrag] = useState<GroupDrag | null>(null)
   /** 함께 끄는 대상 id (dragEnd가 렌더보다 먼저 올 수 있어 ref로도 보관) */
-  const dragIdsRef = useRef<{ instances: string[]; junctions: string[] }>({ instances: [], junctions: [] })
+  const dragIdsRef = useRef<{ instances: string[]; junctions: string[]; notes: string[] }>({ instances: [], junctions: [], notes: [] })
   const [junctionDrag, setJunctionDrag] = useState<{ id: string; p: Point } | null>(null)
   const junctionDragRef = useRef<{ id: string; p: Point } | null>(null)
   const [band, setBand] = useState<Band | null>(null)
@@ -201,14 +237,36 @@ export function CanvasView({ onZoomChange }: Props) {
   const wireMode = tool === 'wire'
   const [handleDrag, setHandleDrag] = useState<{ wireId: string; index: number; p: Point } | null>(null)
   const handleDragRef = useRef<{ wireId: string; index: number; p: Point } | null>(null)
+  /** 크기 손잡이를 끄는 중 (034): 몇 번째 손잡이, 원래 크기 대비 비율 */
+  const [resize, setResize] = useState<{ corner: number; factor: number } | null>(null)
+  const resizeRef = useRef<{ corner: number; factor: number } | null>(null)
   const images = useImages(project.parts)
   const endPos = useMemo(() => makeEndPos(project, drag, junctionDrag), [project, drag, junctionDrag])
   const selectedInstances = useMemo(() => new Set(selection.instances), [selection.instances])
   const selectedWires = useMemo(() => new Set(selection.wires), [selection.wires])
   const selectedJunctions = useMemo(() => new Set(selection.junctions), [selection.junctions])
+  const selectedNotes = useMemo(() => new Set(selection.notes), [selection.notes])
+  const editingNote = useUiStore((s) => s.editingNote)
+  const gridSnap = useSettingsStore((s) => s.gridSnap)
+  const gridSize = useSettingsStore((s) => s.gridSize)
+  const gridStep = gridSnap ? gridSize : GRID
 
   const viewRef = useRef(view)
   viewRef.current = view
+
+  // 배선도(아래 탭)마다 화면 위치를 기억한다 (030). 처음 보는 배선도는 전체 보기
+  const activeSheet = useWorkspaceStore((s) => s.activeId)
+  const sheetViews = useRef(new Map<string, View>())
+  const shownSheet = useRef(activeSheet)
+  useEffect(() => {
+    if (shownSheet.current === activeSheet) return
+    sheetViews.current.set(shownSheet.current, viewRef.current)
+    shownSheet.current = activeSheet
+    const saved = sheetViews.current.get(activeSheet)
+    const r = containerRef.current!.getBoundingClientRect()
+    const bounds = contentBounds(useProjectStore.getState().project)
+    setView(saved ?? (bounds ? fitView(bounds, { width: r.width, height: r.height }) : { scale: 1, x: r.width / 2, y: r.height / 2 }))
+  }, [activeSheet])
 
   useEffect(() => {
     const el = containerRef.current!
@@ -384,6 +442,16 @@ export function CanvasView({ onZoomChange }: Props) {
         const r = containerRef.current!.getBoundingClientRect()
         const bounds = contentBounds(useProjectStore.getState().project)
         setView(bounds ? fitView(bounds, { width: r.width, height: r.height }) : { scale: 1, x: r.width / 2, y: r.height / 2 })
+      },
+      center: () => {
+        const c = center()
+        const v = viewRef.current
+        return { x: (c.x - v.x) / v.scale, y: (c.y - v.y) / v.scale }
+      },
+      centerOn: (p) => {
+        const c = center()
+        const scale = Math.max(viewRef.current.scale, 0.8)
+        setView({ scale, x: c.x - p.x * scale, y: c.y - p.y * scale })
       }
     })
     return () => registerCanvasZoom(null)
@@ -544,7 +612,7 @@ export function CanvasView({ onZoomChange }: Props) {
     e.cancelBubble = true
     const ui = useUiStore.getState()
     const additive = e.evt.ctrlKey || e.evt.metaKey || e.evt.shiftKey
-    const list = kind === 'instance' ? ui.selection.instances : kind === 'wire' ? ui.selection.wires : ui.selection.junctions
+    const list = kind === 'instance' ? ui.selection.instances : kind === 'wire' ? ui.selection.wires : kind === 'junction' ? ui.selection.junctions : ui.selection.notes
     if (additive) ui.toggle(kind, id)
     else if (!list.includes(id)) ui.selectOne(kind, id) // 이미 선택된 것을 누르면 선택 유지 → 함께 끌기
   }
@@ -560,31 +628,65 @@ export function CanvasView({ onZoomChange }: Props) {
     useUiStore.getState().selectOne(kind, id)
   }
 
+  /**
+   * 부품·글 상자를 끌기 시작: 잡은 것이 선택돼 있으면 선택한 부품·접속점·글 상자를 모두 함께, 아니면 그것만
+   */
+  const startGroupDrag = (kind: 'instance' | 'note', id: string) => {
+    const sel = useUiStore.getState().selection
+    const together = kind === 'instance' ? sel.instances.includes(id) : sel.notes.includes(id)
+    const ids = together ? sel.instances : kind === 'instance' ? [id] : []
+    const junctions = together ? sel.junctions : []
+    const notes = together ? sel.notes : kind === 'note' ? [id] : []
+    dragIdsRef.current = { instances: ids, junctions, notes }
+    setDrag({ ids: new Set(ids), junctions: new Set(junctions), notes: new Set(notes), dx: 0, dy: 0 })
+  }
+  const endGroupDrag = (dx: number, dy: number) => {
+    const { instances, junctions, notes } = dragIdsRef.current
+    dragIdsRef.current = { instances: [], junctions: [], notes: [] }
+    setDrag(null)
+    useProjectStore.getState().moveInstances(instances, dx, dy, junctions, notes)
+  }
+  /**
+   * 끄는 도형의 이동량. 격자 맞춤이 켜져 있으면(Alt를 누르면 반대로) 잡은 도형의 기준점을 격자에 맞춘다 (033).
+   * 함께 옮기는 나머지는 같은 만큼 → 모양 유지
+   */
+  const snappedDelta = (origin: Point, e: KDrag) => {
+    const { gridSnap, gridSize } = useSettingsStore.getState()
+    let p = { x: e.target.x(), y: e.target.y() }
+    if (gridSnap !== e.evt.altKey) {
+      p = snapTo(p, gridSize)
+      e.target.position(p)
+    }
+    return { dx: p.x - origin.x, dy: p.y - origin.y }
+  }
+
   const apiRef = useRef<CanvasApi>(null!)
   apiRef.current = {
     itemMouseDown,
     itemClick,
 
-    partDragStart: (inst) => {
-      const sel = useUiStore.getState().selection
-      const together = sel.instances.includes(inst.id)
-      const ids = together ? sel.instances : [inst.id]
-      const junctions = together ? sel.junctions : []
-      dragIdsRef.current = { instances: ids, junctions }
-      setDrag({ ids: new Set(ids), junctions: new Set(junctions), dx: 0, dy: 0 })
-    },
+    partDragStart: (inst) => startGroupDrag('instance', inst.id),
     partDragMove: (inst, e) => {
-      const dx = e.target.x() - inst.x
-      const dy = e.target.y() - inst.y
+      const { dx, dy } = snappedDelta(inst, e)
       setDrag((d) => (d ? { ...d, dx, dy } : d))
     },
     partDragEnd: (inst, e) => {
-      const dx = e.target.x() - inst.x
-      const dy = e.target.y() - inst.y
-      const { instances, junctions } = dragIdsRef.current
-      dragIdsRef.current = { instances: [], junctions: [] }
-      setDrag(null)
-      useProjectStore.getState().moveInstances(instances.length ? instances : [inst.id], dx, dy, junctions)
+      const { dx, dy } = snappedDelta(inst, e)
+      endGroupDrag(dx, dy)
+    },
+    noteDragStart: (note) => startGroupDrag('note', note.id),
+    noteDragMove: (note, e) => {
+      const { dx, dy } = snappedDelta(note, e)
+      setDrag((d) => (d ? { ...d, dx, dy } : d))
+    },
+    noteDragEnd: (note, e) => {
+      const { dx, dy } = snappedDelta(note, e)
+      endGroupDrag(dx, dy)
+    },
+    noteDblClick: (note, e) => {
+      e.cancelBubble = true
+      useUiStore.getState().selectOne('note', note.id)
+      useUiStore.getState().setEditingNote(note.id)
     },
 
     wireMouseDown: (w, e) => {
@@ -721,7 +823,9 @@ export function CanvasView({ onZoomChange }: Props) {
     const part = useLibraryStore.getState().parts.find((p) => p.id === partId)
     if (!part) return
     e.preventDefault()
-    const at = toWorld(e.clientX, e.clientY)
+    const raw = toWorld(e.clientX, e.clientY)
+    const { gridSnap, gridSize } = useSettingsStore.getState()
+    const at = gridSnap !== e.altKey ? snapTo(raw, gridSize) : raw
     const id = useProjectStore.getState().addPart(part, at.x, at.y)
     useUiStore.getState().selectOne('instance', id)
   }
@@ -743,7 +847,59 @@ export function CanvasView({ onZoomChange }: Props) {
   const startKey = targetKey(wireStart)
 
   /** 화면에 보이는 부품 (끄는 중인 부품은 늘 그린다) + 그 중심 */
-  const shownInstances = project.instances.flatMap((inst) => {
+  /** 크기 손잡이: 선택 모드에서 부품 하나 또는 글 상자 하나만 골랐을 때 */
+  const resizeTarget = ((): ResizeTarget | null => {
+    if (wireMode || drag || selectionCount(selection) !== 1) return null
+    if (selection.instances.length === 1) {
+      const inst = project.instances.find((i) => i.id === selection.instances[0])
+      const part = inst && project.parts[inst.partId]
+      if (!inst || !part) return null
+      const b = instanceBounds(inst, part)
+      // 선택 점선(부품 둘레 4) 모서리에 둔다
+      const corners = [
+        { x: b.x - 4, y: b.y - 4 },
+        { x: b.x + b.width + 4, y: b.y - 4 },
+        { x: b.x + b.width + 4, y: b.y + b.height + 4 },
+        { x: b.x - 4, y: b.y + b.height + 4 }
+      ]
+      return { items: { instances: [inst.id] }, anchor: { x: inst.x, y: inst.y }, rect: b, corners, limit: (f) => clampScale(inst.scale * f) / inst.scale }
+    }
+    const n = selection.notes.length === 1 ? project.notes?.find((x) => x.id === selection.notes[0]) : undefined
+    if (!n || editingNote === n.id) return null
+    const { width, height } = noteSize(n)
+    return {
+      items: { notes: [n.id] },
+      anchor: { x: n.x, y: n.y },
+      rect: { x: n.x, y: n.y, width, height },
+      corners: [{ x: n.x + width, y: n.y + height }],
+      limit: (f) => resizedNote(n, f).width / n.width
+    }
+  })()
+  const resizeFactor = resize?.factor ?? 1
+  const resizingInstance = resize && resizeTarget?.items.instances?.[0]
+  const resizingNote = resize && resizeTarget?.items.notes?.[0]
+
+  const resizeMove = (corner: number, k: Point, e: KDrag) => {
+    if (!resizeTarget) return
+    const p = e.target.position()
+    const a = resizeTarget.anchor
+    const d = { x: k.x - a.x, y: k.y - a.y }
+    // 손잡이를 anchor→모서리 방향으로 얼마나 옮겼나 (대각선에 투영)
+    const raw = ((p.x - a.x) * d.x + (p.y - a.y) * d.y) / (d.x * d.x + d.y * d.y)
+    resizeRef.current = { corner, factor: resizeTarget.limit(Math.max(0.01, raw)) }
+    setResize(resizeRef.current)
+  }
+  const resizeEnd = (k: Point, e: KDrag) => {
+    e.target.position(k)
+    const r = resizeRef.current
+    resizeRef.current = null
+    setResize(null)
+    if (resizeTarget && r && Math.abs(r.factor - 1) > 1e-3) useProjectStore.getState().resizeItems(resizeTarget.items, r.factor)
+  }
+
+  const shownInstances = project.instances.flatMap((raw) => {
+    // 크기 손잡이를 끄는 중이면 그 부품은 바뀔 크기로 그린다
+    const inst = resizingInstance === raw.id ? { ...raw, scale: clampScale(raw.scale * resizeFactor) } : raw
     const part = project.parts[inst.partId]
     if (!part) return []
     const center = centerOf(inst, drag)
@@ -784,7 +940,7 @@ export function CanvasView({ onZoomChange }: Props) {
           onMouseMove={handleMouseMove}
         >
           <Layer listening={false}>
-            <Grid view={view} width={size.width} height={size.height} />
+            <Grid view={view} width={size.width} height={size.height} step={gridStep} />
           </Layer>
 
           {/* 1. 부품 사진 (배선 모드에서는 누를 수 없음 → 클릭이 빈 곳처럼 꺾임점이 된다) */}
@@ -835,6 +991,21 @@ export function CanvasView({ onZoomChange }: Props) {
                 ))}
               </>
             )}
+          </Layer>
+
+          {/* 2-1. 글 상자 (선택 모드에서 끌어 옮기고, 두 번 누르면 글 고치기) */}
+          <Layer listening={!wireMode}>
+            {(project.notes ?? []).map((n) => (
+              <NoteNode
+                key={n.id}
+                note={resizingNote === n.id ? resizedNote(n, resizeFactor) : n}
+                at={drag?.notes.has(n.id) ? { x: n.x + drag.dx, y: n.y + drag.dy } : n}
+                selected={selectedNotes.has(n.id)}
+                editing={editingNote === n.id}
+                draggable={!spaceHeld && !wireMode && editingNote !== n.id}
+                api={apiRef}
+              />
+            ))}
           </Layer>
 
           {/* 3. 핀, 접속점, 참조명, 선택 사각형 */}
@@ -896,6 +1067,44 @@ export function CanvasView({ onZoomChange }: Props) {
                 <Text text={hoverPin.text} fontSize={12} padding={4} fill="#fff" />
               </Label>
             )}
+            {resizeTarget && (
+              <>
+                {resize && (
+                  <Rect
+                    {...scaleRect(resizeTarget.rect, resizeTarget.anchor, resizeFactor)}
+                    stroke="#2563eb"
+                    strokeWidth={1 / view.scale}
+                    dash={[4 / view.scale, 3 / view.scale]}
+                    listening={false}
+                  />
+                )}
+                {resizeTarget.corners.map((k, i) =>
+                  resize && resize.corner !== i ? null : (
+                    <Rect
+                      key={i}
+                      name="resize-handle"
+                      x={k.x}
+                      y={k.y}
+                      width={RESIZE_HANDLE / view.scale}
+                      height={RESIZE_HANDLE / view.scale}
+                      offsetX={RESIZE_HANDLE / view.scale / 2}
+                      offsetY={RESIZE_HANDLE / view.scale / 2}
+                      fill="#fff"
+                      stroke="#2563eb"
+                      strokeWidth={1.5 / view.scale}
+                      draggable={!spaceHeld}
+                      onMouseDown={(e) => apiRef.current.pinMouseDown(e)}
+                      onMouseEnter={(e) =>
+                        setCursor(e, (k.x - resizeTarget.anchor.x) * (k.y - resizeTarget.anchor.y) > 0 ? 'nwse-resize' : 'nesw-resize')
+                      }
+                      onMouseLeave={(e) => setCursor(e, '')}
+                      onDragMove={(e) => resizeMove(i, k, e)}
+                      onDragEnd={(e) => resizeEnd(k, e)}
+                    />
+                  )
+                )}
+              </>
+            )}
             {bandRect && (
               <Rect
                 {...bandRect}
@@ -909,7 +1118,53 @@ export function CanvasView({ onZoomChange }: Props) {
           </Layer>
         </Stage>
       )}
+      {editingNote && <NoteEditor id={editingNote} view={view} />}
     </div>
+  )
+}
+
+/** 글 상자 글 고치기: 그 자리에 여러 줄 입력칸. Enter는 줄바꿈, Ctrl+Enter·다른 곳 누르기 = 적용, Esc = 취소. 비우면 글 상자를 지운다 */
+function NoteEditor({ id, view }: { id: string; view: View }) {
+  const note = useProjectStore((s) => s.project.notes?.find((n) => n.id === id))
+  const [text, setText] = useState(note?.text ?? '')
+  const done = useRef(false)
+  if (!note) return null
+  const finish = (apply: boolean) => {
+    if (done.current) return
+    done.current = true
+    const ui = useUiStore.getState()
+    ui.setEditingNote(null)
+    if (!apply) return
+    if (!text.trim()) {
+      useProjectStore.getState().removeItems({ instances: [], wires: [], notes: [id] })
+      ui.clearSelection()
+    } else useProjectStore.getState().updateNote(id, { text })
+  }
+  const font = noteFont(note) * view.scale
+  return (
+    <textarea
+      className="note-editor"
+      aria-label={t('글 상자 글')}
+      autoFocus
+      value={text}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Escape') finish(false)
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) finish(true)
+      }}
+      style={{
+        left: view.x + note.x * view.scale,
+        top: view.y + note.y * view.scale,
+        width: note.width * view.scale,
+        minHeight: font * 1.3 + 2 * NOTE_PADDING * view.scale,
+        fontSize: font,
+        padding: NOTE_PADDING * view.scale,
+        color: note.color ?? NOTE_DEFAULT_COLOR
+      }}
+    />
   )
 }
 
@@ -1141,11 +1396,43 @@ const JunctionNode = memo(function JunctionNode(props: {
 })
 
 /** 현재 보이는 영역에만 점 격자를 그린다 */
-function Grid({ view, width, height }: { view: View; width: number; height: number }) {
+/** 글 상자: 연한 노랑 바탕에 글. 너비는 고정, 높이는 글에 맞춘다 (Label이 Text 크기를 따라간다) */
+const NoteNode = memo(function NoteNode(props: { note: Note; at: Point; selected: boolean; editing: boolean; draggable: boolean; api: Api }) {
+  const { note, at, selected, editing, draggable, api } = props
+  return (
+    <Group
+      x={at.x}
+      y={at.y}
+      draggable={draggable}
+      opacity={editing ? 0 : 1}
+      onMouseDown={(e) => api.current.itemMouseDown('note', note.id, e)}
+      onClick={(e) => api.current.itemClick('note', note.id, e)}
+      onDblClick={(e) => api.current.noteDblClick(note, e)}
+      onDragStart={() => api.current.noteDragStart(note)}
+      onDragMove={(e) => api.current.noteDragMove(note, e)}
+      onDragEnd={(e) => api.current.noteDragEnd(note, e)}
+    >
+      <Label>
+        <Tag fill="#fff8c5" stroke={selected ? '#2563eb' : '#e3c84b'} strokeWidth={selected ? 2 : 1} dash={selected ? [6, 4] : undefined} cornerRadius={4} />
+        <Text
+          text={note.text || ' '}
+          width={note.width}
+          padding={NOTE_PADDING}
+          fontSize={noteFont(note)}
+          lineHeight={1.3}
+          fill={note.color ?? NOTE_DEFAULT_COLOR}
+          wrap="char"
+        />
+      </Label>
+    </Group>
+  )
+})
+
+function Grid({ view, width, height, step: base }: { view: View; width: number; height: number; step: number }) {
   return (
     <Shape
       sceneFunc={(ctx) => {
-        let step = GRID
+        let step = base
         while (step * view.scale < 10) step *= 5
         const left = -view.x / view.scale
         const top = -view.y / view.scale

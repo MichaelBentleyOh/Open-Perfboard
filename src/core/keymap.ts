@@ -27,9 +27,10 @@ export type ShortcutId =
   | 'new' | 'open' | 'save' | 'saveAs' | 'pdf'
   | 'undo' | 'redo' | 'copy' | 'cut' | 'paste' | 'selectAll' | 'delete'
   | 'selectMode' | 'wireMode' | 'escape' | 'wireBack'
-  | 'rotate' | 'rotateBack' | 'flipH' | 'flipV'
+  | 'rotate' | 'rotateBack' | 'flipH' | 'flipV' | 'grow' | 'shrink'
   | 'zoom100' | 'zoomIn' | 'zoomOut' | 'fit'
   | 'help'
+  | 'textBox' | 'search'
 
 export interface Shortcut {
   id: ShortcutId
@@ -68,6 +69,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'cut', group: G.edit, description: msg('잘라내기'), combos: [ctrl('x')], scope: 'diagram' },
   { id: 'paste', group: G.edit, description: msg('붙여넣기 (마우스 위치)'), combos: [ctrl('v')], scope: 'diagram' },
   { id: 'selectAll', group: G.edit, description: msg('전체 선택'), combos: [ctrl('a')], scope: 'diagram' },
+  { id: 'textBox', group: G.edit, description: msg('글 상자 추가 (화면 가운데)'), combos: [plain('t')], scope: 'diagram' },
+  { id: 'search', group: G.edit, description: msg('부품·신호 찾기 (모든 배선도)'), combos: [ctrl('f')], scope: 'app' },
 
   { id: 'selectMode', group: G.mode, description: msg('선택 모드 (고르기·옮기기)'), combos: [plain('v')], scope: 'diagram' },
   { id: 'wireMode', group: G.mode, description: msg('배선 모드 (잇기·분기)'), combos: [plain('w')], scope: 'diagram' },
@@ -80,6 +83,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'rotateBack', group: G.part, description: msg('반시계 방향 90° 회전'), combos: [plain('r', true)], scope: 'diagram' },
   { id: 'flipH', group: G.part, description: msg('좌우 반전'), combos: [plain('f')], scope: 'diagram' },
   { id: 'flipV', group: G.part, description: msg('상하 반전'), combos: [plain('f', true)], scope: 'diagram' },
+  { id: 'grow', group: G.part, description: msg('부품·글 상자 크게'), combos: [plain(']')], scope: 'diagram' },
+  { id: 'shrink', group: G.part, description: msg('부품·글 상자 작게'), combos: [plain('[')], scope: 'diagram' },
 
   { id: 'zoom100', group: G.view, description: msg('배율 100%'), combos: [ctrl('0')], scope: 'diagram' },
   {
@@ -111,7 +116,10 @@ export const MOUSE_HELP: readonly { gesture: string; description: string }[] = [
   { gesture: msg('핀 클릭 → 핀 클릭'), description: msg('전선 잇기 (배선 모드, 빈 곳 클릭 = 꺾기)') },
   { gesture: msg('전선 클릭 · 끌어서 핀에 놓기'), description: msg('분기 (배선 모드)') },
   { gesture: msg('선택한 전선 더블클릭'), description: msg('꺾임점 추가 (손잡이 끌기 = 이동, 손잡이 더블클릭 = 삭제)') },
-  { gesture: msg('부품함의 부품 → 캔버스로 끌기'), description: msg('부품 배치') }
+  { gesture: msg('부품함의 부품 → 캔버스로 끌기'), description: msg('부품 배치') },
+  { gesture: msg('글 상자 두 번 누르기'), description: msg('글 고치기 (Ctrl+Enter 적용, Esc 취소)') },
+  { gesture: msg('Alt 누르고 끌기'), description: msg('격자 맞춤을 잠시 반대로') },
+  { gesture: msg('모서리 손잡이 끌기'), description: msg('크기 바꾸기 (선택한 부품·글 상자 하나)') }
 ]
 
 /** 키 이벤트가 조합과 맞는지. Alt가 눌렸으면 어떤 단축키도 아니다 */

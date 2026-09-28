@@ -2,9 +2,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import type { PartDef, Project, WireDirection } from '../../src/core/model'
+import type { PartDef, Project, Supply, WireDirection } from '../../src/core/model'
+import { chooseSupply, setWireSupplies } from '../../src/core/supply'
 import { addInstance, connectEnds, emptyProject, routeWires, setMeta, updateInstance } from '../../src/core/ops'
-import { serializePart, serializeProject } from '../../src/core/serialize'
+import { serializePart, serializeProject, serializeSupply } from '../../src/core/serialize'
 import { launchApp, makeTempDir, makeUserDataDir, nextFrame, stubDialogs } from '../../tests/e2e/launch'
 
 export const OUT = join(__dirname, '../../images')
@@ -85,11 +86,43 @@ const EN: Record<string, string> = {
   '나사 단자 2P': 'Screw terminal 2P',
   '탭 단자': 'Tab terminal',
   '로봇 구동부 배선': 'Robot drive wiring',
+  '듀폰 하우징 4P': 'Dupont housing 4P',
+  '듀폰 하우징 8P': 'Dupont housing 8P',
+  '듀폰 암 단자': 'Dupont female terminal',
+  'XT60 암 커넥터': 'XT60 female connector',
+  '실리콘 전선 18AWG': 'Silicone wire 18AWG',
+  '실리콘 전선 20AWG': 'Silicone wire 20AWG',
+  'UL1007 전선 26AWG': 'UL1007 wire 26AWG',
+  '수축 튜브 Ø2': 'Heat-shrink Ø2',
+  '수축 튜브 Ø6': 'Heat-shrink Ø6',
+  '10 m 릴': '10 m reel',
+  '1 m 롤': '1 m roll',
+  '100개입': 'pack of 100',
   '예시 배선도 (README 스크린샷)': 'Example diagram (README screenshots)'
 }
 export const tr = (s: string, lang: Lang) => (lang === 'en' ? (EN[s] ?? s) : s)
 const partsIn = (lang: Lang): PartDef[] =>
   PARTS.map((p) => ({ ...p, name: tr(p.name, lang), connectors: p.connectors.map((c) => ({ ...c, type: tr(c.type, lang) })) }))
+
+/** 예시 부속 부품 (027): 하우징·단자·전선·수축 튜브 */
+const SUPPLIES: Supply[] = [
+  { id: 'demo-dupont-4', kind: 'housing', name: '듀폰 하우징 4P', connectorType: '2.54mm 헤더 4P', terminalId: 'demo-dupont-f', unitPrice: 50 },
+  { id: 'demo-dupont-8', kind: 'housing', name: '듀폰 하우징 8P', connectorType: '2.54mm 헤더 8P', terminalId: 'demo-dupont-f', unitPrice: 90 },
+  { id: 'demo-dupont-f', kind: 'terminal', name: '듀폰 암 단자', pack: '100개입', unitPrice: 20 },
+  { id: 'demo-xt60', kind: 'housing', name: 'XT60 암 커넥터', connectorType: 'XT60', unitPrice: 1200 },
+  { id: 'demo-wire-18', kind: 'wire', name: '실리콘 전선 18AWG', awg: 18, pack: '10 m 릴', unitPrice: 9000 },
+  { id: 'demo-wire-20', kind: 'wire', name: '실리콘 전선 20AWG', awg: 20, pack: '10 m 릴', unitPrice: 7000 },
+  { id: 'demo-wire-26', kind: 'wire', name: 'UL1007 전선 26AWG', awg: 26, pack: '10 m 릴', unitPrice: 3500 },
+  { id: 'demo-tube-2', kind: 'tube', name: '수축 튜브 Ø2', diameter: 2, pack: '1 m 롤', unitPrice: 800 },
+  { id: 'demo-tube-6', kind: 'tube', name: '수축 튜브 Ø6', diameter: 6, pack: '1 m 롤', unitPrice: 1500 }
+]
+const suppliesIn = (lang: Lang): Supply[] =>
+  SUPPLIES.map((s) => ({
+    ...s,
+    name: tr(s.name, lang),
+    ...(s.connectorType ? { connectorType: tr(s.connectorType, lang) } : {}),
+    ...(s.pack ? { pack: tr(s.pack, lang) } : {})
+  }))
 
 /** 작은 로봇 배선도: 배터리 → 모터 드라이버 → 모터, 제어 보드 → 드라이버·센서. omit = 빼 둘 부품 id(이어진 전선도 뺌) */
 export function demoProject(lang: Lang, omit: string[] = []): Project {
@@ -108,26 +141,41 @@ export function demoProject(lang: Lang, omit: string[] = []): Project {
     if (scale !== 1) p = updateInstance(p, id, { scale })
   }
   let n = 0
-  const wire = (a: [string, string], b: [string, string], color: string, extra: { label?: string; awg?: number; length?: number; direction?: WireDirection } = {}) => {
+  const wire = (a: [string, string], b: [string, string], color: string, extra: { label?: string; awg?: number; direction?: WireDirection } = {}) => {
     if (omit.includes(a[0]) || omit.includes(b[0])) return
     const r = connectEnds(p, { instanceId: a[0], pinId: a[1] }, { instanceId: b[0], pinId: b[1] }, { color, width: extra.awg && extra.awg <= 18 ? 3 : 2, orthogonal: true, ...extra }, () => `w${++n}`)
     if (!r.ok) throw new Error(r.error)
     p = r.project
   }
   // 신호 방향(결선표 연결 라벨의 -> / <-): forward = 앞 핀에서 뒤 핀으로
-  wire(['bt', 'bp'], ['drv', 'vm'], '#e53935', { label: 'VBAT', awg: 18, length: 250, direction: 'forward' })
-  wire(['bt', 'bn'], ['drv', 'g1'], '#212121', { awg: 18, length: 250 })
-  wire(['drv', 'mp'], ['mot', 'mp'], '#fb8c00', { awg: 20, length: 180, direction: 'forward' })
-  wire(['drv', 'mn'], ['mot', 'mn'], '#212121', { awg: 20, length: 180, direction: 'forward' })
-  wire(['mcu', 'p3'], ['drv', 'in1'], '#fdd835', { awg: 26, length: 150, direction: 'forward' })
-  wire(['mcu', 'p4'], ['drv', 'in2'], '#43a047', { awg: 26, length: 150, direction: 'forward' })
-  wire(['mcu', 'p5'], ['drv', 'en'], '#1e88e5', { awg: 26, length: 150, direction: 'forward' })
-  wire(['mcu', 'p2'], ['drv', 'g2'], '#212121', { awg: 26, length: 150 })
-  wire(['mcu', 'p1'], ['sen', 'vcc'], '#e53935', { awg: 26, length: 200, direction: 'forward' })
-  wire(['mcu', 'p6'], ['sen', 'trig'], '#8e24aa', { awg: 26, length: 200, direction: 'forward' })
-  wire(['mcu', 'p7'], ['sen', 'echo'], '#f5f5f5', { awg: 26, length: 200, direction: 'reverse' })
-  wire(['sen', 'gnd'], ['mcu', 'p2'], '#212121', { awg: 26, length: 200 })
+  wire(['bt', 'bp'], ['drv', 'vm'], '#e53935', { label: 'VBAT', awg: 18, direction: 'forward' })
+  wire(['bt', 'bn'], ['drv', 'g1'], '#212121', { awg: 18 })
+  wire(['drv', 'mp'], ['mot', 'mp'], '#fb8c00', { awg: 20, direction: 'forward' })
+  wire(['drv', 'mn'], ['mot', 'mn'], '#212121', { awg: 20, direction: 'forward' })
+  wire(['mcu', 'p3'], ['drv', 'in1'], '#fdd835', { awg: 26, direction: 'forward' })
+  wire(['mcu', 'p4'], ['drv', 'in2'], '#43a047', { awg: 26, direction: 'forward' })
+  wire(['mcu', 'p5'], ['drv', 'en'], '#1e88e5', { awg: 26, direction: 'forward' })
+  wire(['mcu', 'p2'], ['drv', 'g2'], '#212121', { awg: 26 })
+  wire(['mcu', 'p1'], ['sen', 'vcc'], '#e53935', { awg: 26, direction: 'forward' })
+  wire(['mcu', 'p6'], ['sen', 'trig'], '#8e24aa', { awg: 26, direction: 'forward' })
+  wire(['mcu', 'p7'], ['sen', 'echo'], '#f5f5f5', { awg: 26, direction: 'reverse' })
+  wire(['sen', 'gnd'], ['mcu', 'p2'], '#212121', { awg: 26 })
   p = routeWires(p, p.wires.map((w) => w.id))
+  // 부속 부품: 전선 종류·수축 튜브, BOM에는 하우징·단자·전선을 넣고 수축 튜브는 아직 묻는 중으로 둔다
+  const sup = Object.fromEntries(suppliesIn(lang).map((s) => [s.id, s]))
+  const ids = new Set(p.wires.map((w) => w.id))
+  const pick = (wireIds: string[], patch: Parameters<typeof setWireSupplies>[2]) => {
+    const list = wireIds.filter((id) => ids.has(id))
+    if (list.length) p = setWireSupplies(p, list, patch)
+  }
+  pick(['w1', 'w2'], { wire: sup['demo-wire-18'], tubeEnds: sup['demo-tube-6'] })
+  pick(['w3', 'w4'], { wire: sup['demo-wire-20'], tubeEnds: sup['demo-tube-6'] })
+  pick(['w5', 'w6', 'w7', 'w8', 'w9', 'w10', 'w11', 'w12'], { wire: sup['demo-wire-26'] })
+  pick(['w9', 'w10', 'w11', 'w12'], { tubeMiddle: sup['demo-tube-2'] })
+  const library = suppliesIn(lang)
+  for (const id of ['demo-dupont-4', 'demo-dupont-8', 'demo-dupont-f', 'demo-xt60', 'demo-wire-18', 'demo-wire-20', 'demo-wire-26']) {
+    p = chooseSupply(p, sup[id], true, library)
+  }
   return setMeta(p, { author: 'Open Perfboard', notes: tr('예시 배선도 (README 스크린샷)', lang) })
 }
 
@@ -142,6 +190,8 @@ export async function openDemo(lang: Lang, o: { omit?: string[] } = {}) {
   const userData = makeUserDataDir()
   mkdirSync(join(userData, 'library'), { recursive: true })
   for (const p of partsIn(lang)) writeFileSync(join(userData, 'library', `${p.id}.json`), serializePart(p))
+  mkdirSync(join(userData, 'library', 'supplies'), { recursive: true })
+  for (const s of suppliesIn(lang)) writeFileSync(join(userData, 'library', 'supplies', `${s.id}.json`), serializeSupply(s))
   const name = tr('로봇 구동부 배선', lang)
   const file = join(makeTempDir('opb-readme-'), `${name}.opb`)
   writeFileSync(file, serializeProject(demoProject(lang, o.omit)))

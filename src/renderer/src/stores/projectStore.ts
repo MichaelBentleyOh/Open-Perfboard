@@ -5,7 +5,9 @@
 import { create } from 'zustand'
 import { temporal } from 'zundo'
 import { nanoid } from 'nanoid'
-import type { PartDef, Project, ProjectMeta } from '@core/model'
+import type { Currency, Note, PartDef, Project, ProjectMeta, Supply } from '@core/model'
+import { addNote, updateNote, type NotePatch } from '@core/note'
+import { chooseSupply, setSupplyChoice, setWireSupplies, type SupplyChoicePatch, type WireSupplyPatch } from '@core/supply'
 import type { Point } from '@core/geometry'
 import { pasteClipboard, type ClipboardData, type PasteResult } from '@core/clipboard'
 import { avoidParts } from '@core/avoid'
@@ -16,6 +18,8 @@ import {
   moveJunction,
   type WireTarget,
   flipInstances,
+  alignInstances,
+  type AlignMode,
   setMeta,
   moveWirePoint,
   insertWirePoint,
@@ -27,6 +31,7 @@ import {
   addBomItem,
   updateBomItem,
   removeBomItem,
+  setBomCurrency,
   type BomOverridePatch,
   type BomItemPatch,
   emptyProject,
@@ -35,6 +40,7 @@ import {
   replacePartDef,
   rotateInstances,
   updateInstance,
+  resizeItems,
   updateWires,
   updatePartDef,
   type PartSpecPatch,
@@ -48,10 +54,17 @@ interface ProjectState {
   project: Project
   /** 부품을 배치하고 새 배치 id를 돌려준다 */
   addPart: (part: PartDef, x: number, y: number) => string
-  moveInstances: (ids: readonly string[], dx: number, dy: number, junctionIds?: readonly string[]) => void
+  moveInstances: (ids: readonly string[], dx: number, dy: number, junctionIds?: readonly string[], noteIds?: readonly string[]) => void
+  /** 글 상자 (032) */
+  addNote: (note: Note) => void
+  updateNote: (id: string, patch: NotePatch) => void
+  /** 부품·글 상자 크기를 factor배로 (034) */
+  resizeItems: (items: { instances?: readonly string[]; notes?: readonly string[] }, factor: number) => void
   moveJunction: (id: string, p: Point) => void
   rotateInstances: (ids: readonly string[], delta: number) => void
   flipInstances: (ids: readonly string[], axis: 'horizontal' | 'vertical') => void
+  /** 부품 줄 맞추기·간격 맞추기 */
+  alignInstances: (ids: readonly string[], mode: AlignMode) => void
   setMeta: (meta: ProjectMeta) => void
   updateInstance: (id: string, patch: InstancePatch) => void
   removeItems: (items: ItemIds) => void
@@ -75,11 +88,20 @@ interface ProjectState {
   addBomItem: (name: string) => string
   updateBomItem: (id: string, patch: BomItemPatch) => void
   removeBomItem: (id: string) => void
+  /** BOM에 부속 부품 넣기/빼기 (027). undefined = 다시 묻기. library = 부품함 부속 부품 (하우징의 단자 찾기) */
+  chooseSupply: (supply: Supply, include: boolean | undefined, library?: readonly Supply[]) => void
+  setSupplyChoice: (id: string, patch: SupplyChoicePatch) => void
+  /** 전선 종류·수축 튜브 (027) */
+  setWireSupplies: (ids: readonly string[], patch: WireSupplyPatch) => void
+  /** BOM 통화·환율. 통화가 바뀌면 단가를 모두 환산 (029) */
+  setBomCurrency: (currency: Currency, rate: number) => void
   updateWires: (ids: readonly string[], patch: WirePatch) => void
   /** 이 배선도의 부품 사본 스펙 (라이브러리는 그대로) */
   updatePartDef: (partId: string, patch: PartSpecPatch) => void
   /** 라이브러리의 최신 부품 정의로 사본을 바꾼다. 지워진 전선 수를 돌려준다 */
   refreshPart: (part: PartDef) => number
+  /** core 함수 하나로 고친다 (여러 배선도에 같은 편집을 할 때, 030). 바뀐 게 없으면 이력에 남기지 않는다 */
+  apply: (fn: (p: Project) => Project) => void
   /** 새 문서/열기. 실행 취소 이력도 비운다 */
   reset: (project: Project) => void
 }
@@ -96,7 +118,7 @@ const withTidy = (project: Project, instanceIds: readonly string[], junctionIds:
 export const useProjectStore = create<ProjectState>()(
   temporal(
     (set, get) => ({
-      project: emptyProject(t('새 배선도')),
+      project: emptyProject(t('배선도 1')),
 
       addPart: (part, x, y) => {
         const id = nanoid()
@@ -104,9 +126,21 @@ export const useProjectStore = create<ProjectState>()(
         set({ project: avoidParts(addInstance(get().project, part, { id, x, y }), { instances: [id] }) })
         return id
       },
-      moveInstances: (ids, dx, dy, junctionIds = []) =>
+      addNote: (note) => set({ project: addNote(get().project, note) }),
+      updateNote: (id, patch) => {
+        const next = updateNote(get().project, id, patch)
+        if (next !== get().project) set({ project: next })
+      },
+      resizeItems: (items, factor) => {
+        const next = resizeItems(get().project, items, factor)
+        if (next === get().project) return
+        // 부품 크기가 바뀌면 핀 자리도 바뀐다 → 전선 정리
+        const ids = items.instances ?? []
+        set({ project: ids.length > 0 ? avoidParts(withTidy(next, ids), { instances: ids }) : next })
+      },
+      moveInstances: (ids, dx, dy, junctionIds = [], noteIds = []) =>
         set({
-          project: avoidParts(withTidy(moveInstances(get().project, ids, dx, dy, junctionIds), ids, junctionIds), {
+          project: avoidParts(withTidy(moveInstances(get().project, ids, dx, dy, junctionIds, noteIds), ids, junctionIds), {
             instances: ids,
             junctions: junctionIds
           })
@@ -115,9 +149,13 @@ export const useProjectStore = create<ProjectState>()(
       rotateInstances: (ids, delta) =>
         set({ project: avoidParts(withTidy(rotateInstances(get().project, ids, delta), ids), { instances: ids }) }),
       flipInstances: (ids, axis) => set({ project: avoidParts(withTidy(flipInstances(get().project, ids, axis), ids), { instances: ids }) }),
+      alignInstances: (ids, mode) => {
+        const next = alignInstances(get().project, ids, mode)
+        if (next !== get().project) set({ project: avoidParts(withTidy(next, ids), { instances: ids }) })
+      },
       setMeta: (meta) => set({ project: setMeta(get().project, meta) }),
       // 배율·회전을 바꾸면 사진 크기·핀 위치가 바뀐다
-      updateInstance: (id, patch) => set({ project: avoidParts(updateInstance(get().project, id, patch), { instances: [id] }) }),
+      updateInstance: (id, patch) => set({ project: avoidParts(withTidy(updateInstance(get().project, id, patch), [id]), { instances: [id] }) }),
       removeItems: (items) => set({ project: removeItems(get().project, items) }),
 
       connect: (from, to, { color, points, orthogonal }) => {
@@ -145,9 +183,9 @@ export const useProjectStore = create<ProjectState>()(
         return true
       },
       paste: (clip, delta, newId) => {
-        const { project, instances, wires, junctions } = pasteClipboard(get().project, clip, delta, newId)
+        const { project, instances, wires, junctions, notes } = pasteClipboard(get().project, clip, delta, newId)
         set({ project: avoidParts(project, { instances, wires, junctions }) })
-        return { instances, wires, junctions }
+        return { instances, wires, junctions, notes }
       },
       setBomOverride: (partId, patch) => set({ project: setBomOverride(get().project, partId, patch) }),
       addBomItem: (name) => {
@@ -157,6 +195,16 @@ export const useProjectStore = create<ProjectState>()(
       },
       updateBomItem: (id, patch) => set({ project: updateBomItem(get().project, id, patch) }),
       removeBomItem: (id) => set({ project: removeBomItem(get().project, id) }),
+      chooseSupply: (supply, include, library) => set({ project: chooseSupply(get().project, supply, include, library) }),
+      setSupplyChoice: (id, patch) => {
+        const next = setSupplyChoice(get().project, id, patch)
+        if (next !== get().project) set({ project: next })
+      },
+      setWireSupplies: (ids, patch) => set({ project: setWireSupplies(get().project, ids, patch) }),
+      setBomCurrency: (currency, rate) => {
+        const next = setBomCurrency(get().project, currency, rate)
+        if (next !== get().project) set({ project: next })
+      },
       updateWires: (ids, patch) => {
         const next = updateWires(get().project, ids, patch)
         set({ project: patch.orthogonal !== undefined ? avoidParts(tidyWires(next, ids), { wires: ids }) : next })
@@ -173,6 +221,11 @@ export const useProjectStore = create<ProjectState>()(
         const instances = r.project.instances.filter((i) => i.partId === part.id).map((i) => i.id)
         set({ project: avoidParts(r.project, { instances }) })
         return r.removedWires
+      },
+
+      apply: (fn) => {
+        const next = fn(get().project)
+        if (next !== get().project) set({ project: next })
       },
 
       reset: (project) => {

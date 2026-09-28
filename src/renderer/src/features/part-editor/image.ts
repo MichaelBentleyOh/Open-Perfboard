@@ -23,12 +23,12 @@ export function loadHtmlImage(src: string): Promise<HTMLImageElement> {
 }
 
 /** 사용자가 고른 사진 파일을 data URL로 읽고, 너무 크면 줄인다 */
-export async function readImageFile(file: File): Promise<PartImage> {
+export async function readImageFile(file: File, maxSide = MAX_SIDE): Promise<PartImage> {
   if (!file.type.startsWith('image/')) throw new Error(t('이미지 파일이 아닙니다'))
   const data = await readAsDataUrl(file)
   const img = await loadHtmlImage(data)
   const { naturalWidth: w, naturalHeight: h } = img
-  const scale = Math.min(1, MAX_SIDE / Math.max(w, h))
+  const scale = Math.min(1, maxSide / Math.max(w, h))
   if (scale === 1) return { data, width: w, height: h }
 
   const width = Math.round(w * scale)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BOM_COLUMNS, bomCsv, bomTotals, buildBom } from '@core/bom'
 import { toCsv } from '@core/csv'
+import { translator } from '@core/i18n'
 import { formatMoney, parseAmount, roundMoney } from '@core/money'
 import {
   addBomItem,
@@ -37,13 +38,30 @@ describe('buildBom', () => {
     expect(buildBom(emptyProject('t'))).toEqual([])
   })
 
-  it('CSV: 단가·금액·비고 열과 합계 행', () => {
+  it('CSV: 번호·분류·품명·세부사항(품번·제조사·참조명)… 칸과 합계 행', () => {
     expect(bomCsv(buildBom(loadSample()))).toBe(
-      '﻿참조명,이름,품번,제조사,수량,단가,금액,구매 링크,비고\r\n' +
-        'CN1,전원 커넥터 PWR-2P,,,1,,,,\r\n' +
-        'U1,제어 보드 CB-100,CB-100,OPB Labs,1,,,,\r\n' +
-        '합계,,,,2,,0,,단가 미입력 2건\r\n'
+      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매사이트,비고\r\n' +
+        '1,부품,전원 커넥터 PWR-2P,CN1,1,,,,,\r\n' +
+        '2,부품,제어 보드 CB-100,CB-100 · OPB Labs · U1,1,,,,,\r\n' +
+        '합계,,,,2,,0,,,단가 미입력 2건\r\n'
     )
+  })
+
+  it('조달처: 부품 기본값 < BOM 수정값, 직접 추가 항목, 영어 분류', () => {
+    let p = loadSample()
+    p.parts['part-ctrl'] = { ...p.parts['part-ctrl'], supplier: '디바이스마트' }
+    expect(buildBom(p)[1].supplier).toBe('디바이스마트')
+    p = setBomOverride(p, 'part-ctrl', { supplier: '엘레파츠' })
+    p = addBomItem(p, { id: 'x', name: '케이블 타이', quantity: 1, supplier: '다이소' })
+    const rows = buildBom(p)
+    expect(rows.map((r) => [r.no, r.category, r.supplier])).toEqual([
+      [1, '부품', undefined],
+      [2, '부품', '엘레파츠'],
+      [3, '직접 추가', '다이소']
+    ])
+    expect(bomCsv(rows, translator('en'))).toContain('3,Added,케이블 타이,,1,,,다이소,,')
+    const again = parseProject(serializeProject(p))
+    expect(again.ok && again.value.bom?.overrides?.['part-ctrl'].supplier).toBe('엘레파츠')
   })
 
   it('구매 링크가 행과 CSV에 들어간다', () => {

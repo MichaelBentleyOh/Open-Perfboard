@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import electronPath from 'electron'
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
-import type { PartDef, Project } from '../../src/core/model'
-import { serializePart } from '../../src/core/serialize'
+import type { PartDef, Project, Supply } from '../../src/core/model'
+import { serializePart, serializeSupply } from '../../src/core/serialize'
 
 /** 실제 사용자 데이터를 건드리지 않도록 임시 폴더를 만든다 */
 export function makeTempDir(prefix = 'opb-e2e-'): string {
@@ -78,6 +78,13 @@ export function seedLibrary(userData: string, overrides: Partial<PartDef> = {}):
   }
   mkdirSync(join(userData, 'library'), { recursive: true })
   writeFileSync(join(userData, 'library', `${part.id}.json`), serializePart(part))
+}
+
+/** 부속 부품(027)을 부품함 폴더에 미리 넣는다 */
+export function seedSupplies(userData: string, supplies: Supply[]): void {
+  const dir = join(userData, 'library', 'supplies')
+  mkdirSync(dir, { recursive: true })
+  for (const s of supplies) writeFileSync(join(dir, `${s.id}.json`), serializeSupply(s))
 }
 
 /** 라이브러리 항목을 캔버스의 화면 좌표에 떨어뜨린다 (HTML5 드래그 이벤트) */

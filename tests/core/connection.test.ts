@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildConnectionLabels, instanceNames, labelsByInstance } from '@core/connection'
-import type { PartDef, Pin, Project, WireDirection } from '@core/model'
+import { PROJECT_FILE_VERSION, type PartDef, type Pin, type Project, type WireDirection } from '@core/model'
 import { arrowToDirection, buildNetlist, wireArrow } from '@core/netlist'
 import { addInstance, connect, emptyProject, splitWire, updateWires } from '@core/ops'
 import { parseProject, serializeProject } from '@core/serialize'
@@ -75,10 +75,10 @@ describe('전선 방향', () => {
     const rb = parseProject(serializeProject(p).replace('"direction": "forward"', '"direction": "sideways"'))
     expect(rb.ok).toBe(false)
     expect(!rb.ok && rb.errors.join()).toContain('direction')
-    const v5 = serializeProject(project(['i0.sda-i1.sda'])).replace(/"version": 6/, '"version": 5')
+    const v5 = serializeProject(project(['i0.sda-i1.sda'])).replace(/"version": \d+/, '"version": 5')
     expect(v5).toContain('"version": 5')
     const r5 = parseProject(v5)
-    expect(r5.ok && r5.value.version).toBe(6)
+    expect(r5.ok && r5.value.version).toBe(PROJECT_FILE_VERSION)
     expect(r5.ok && buildConnectionLabels(r5.value)[0].arrow).toBe('<->')
   })
 

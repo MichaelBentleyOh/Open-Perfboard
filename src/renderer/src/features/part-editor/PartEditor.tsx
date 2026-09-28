@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import type { PartDef } from '@core/model'
 import {
@@ -14,6 +14,8 @@ import {
   type PartDraft
 } from '@core/part'
 import { parseAmount } from '@core/money'
+import { housingsByType } from '@core/supply'
+import { useSupplyStore } from '@/stores/supplyStore'
 import { readImageFile } from './image'
 import { addAttachments, removeAttachment, renameAttachment } from '@core/attachment'
 import { AttachmentList } from '@/features/attachments/AttachmentList'
@@ -42,6 +44,9 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
   const [message, setMessage] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const check = checkDraft(draft, t)
+  // 커넥터 종류: 부속 부품 하우징의 "짝 커넥터"에서 고르거나 직접 입력 (027)
+  const supplies = useSupplyStore((s) => s.supplies)
+  const housings = useMemo(() => housingsByType(supplies), [supplies])
   // 보조선 (026): 편집하는 동안만 있고 저장하지 않는다
   const [tool, setTool] = useState<PinTool>('pin')
   const [guides, setGuides] = useState<Guide[]>([])
@@ -277,17 +282,31 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
               <input value={draft.manufacturer ?? ''} onChange={(e) => set('manufacturer', e.target.value)} />
             </label>
             <label className="field">
+              <span>{t('조달처')}</span>
+              <input value={draft.supplier ?? ''} placeholder={t('구매처 (예: 온라인 부품몰)')} onChange={(e) => set('supplier', e.target.value)} />
+            </label>
+            <label className="field">
               <span>{t('기본 단가')}</span>
-              <input
-                inputMode="decimal"
-                placeholder={t('원 (BOM에서 배선도마다 바꿀 수 있음)')}
-                value={priceText}
-                onChange={(e) => {
-                  setPriceText(e.target.value)
-                  const n = parseAmount(e.target.value)
-                  set('unitPrice', n === undefined ? undefined : n)
-                }}
-              />
+              <span className="price-row">
+                <input
+                  inputMode="decimal"
+                  placeholder={t('BOM에서 배선도마다 바꿀 수 있음')}
+                  value={priceText}
+                  onChange={(e) => {
+                    setPriceText(e.target.value)
+                    const n = parseAmount(e.target.value)
+                    set('unitPrice', n === undefined ? undefined : n)
+                  }}
+                />
+                <select
+                  aria-label={t('단가 통화')}
+                  value={draft.currency ?? 'KRW'}
+                  onChange={(e) => set('currency', e.target.value === 'USD' ? 'USD' : undefined)}
+                >
+                  <option value="KRW">{t('원 (₩)')}</option>
+                  <option value="USD">{t('달러 ($)')}</option>
+                </select>
+              </span>
             </label>
             <label className="field">
               <span>{t('구매 링크')}</span>
@@ -356,10 +375,19 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
                       </td>
                       <td>
                         <input
+                          aria-label={t('커넥터 종류')}
+                          list="connector-type-options"
                           value={c.type}
                           placeholder="JST-XH 4P"
                           onChange={(e) => setDraft((d) => updateConnector(d, c.id, { type: e.target.value }))}
                         />
+                        {c.type.trim() && (
+                          <small className={housings.get(c.type.trim().toLowerCase()) ? 'mate ok' : 'mate'} data-testid="connector-mate">
+                            {housings.get(c.type.trim().toLowerCase())
+                              ? t('짝: {name}', { name: housings.get(c.type.trim().toLowerCase())!.name })
+                              : t('짝 하우징 미지정')}
+                          </small>
+                        )}
                       </td>
                       <td>
                         <button
@@ -379,6 +407,11 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
                 </tbody>
               </table>
             )}
+            <datalist id="connector-type-options">
+              {[...housings.values()].map((h) => (
+                <option key={h.id} value={h.connectorType} label={h.name} />
+              ))}
+            </datalist>
 
             <h3>{t('핀 ({n})', { n: draft.pins.length })}</h3>
             {draft.connectors.length > 0 && (

@@ -42,7 +42,7 @@ test('선택 사각형 → 함께 이동 → 실행 취소 → Ctrl+클릭 → �
     await win.mouse.move(c2.x + 130, c2.y + 130, { steps: 8 })
     await win.screenshot({ path: 'test-results/multiselect-band.png' })
     await win.mouse.up()
-    expect(await selection(win)).toEqual({ instances: [u1, u2], wires: [wireId], junctions: [] })
+    expect(await selection(win)).toEqual({ instances: [u1, u2], wires: [wireId], junctions: [], notes: [] })
     await expect(win.getByTestId('props-multi')).toContainText('부품 2개 · 전선 1개')
 
     // 2. 선택된 U1을 끌면 U2도 함께 이동, U3는 그대로
@@ -58,7 +58,7 @@ test('선택 사각형 → 함께 이동 → 실행 취소 → Ctrl+클릭 → �
       expect(after[i].y - before[i].y).toBeCloseTo(30, 0)
     }
     expect(after[2]).toEqual(before[2])
-    expect(await selection(win)).toEqual({ instances: [u1, u2], wires: [wireId], junctions: [] }) // 끌어도 선택 유지
+    expect(await selection(win)).toEqual({ instances: [u1, u2], wires: [wireId], junctions: [], notes: [] }) // 끌어도 선택 유지
 
     // 3. 실행 취소 한 번에 둘 다 제자리
     await win.keyboard.press('Control+z')
@@ -78,7 +78,7 @@ test('선택 사각형 → 함께 이동 → 실행 취소 → Ctrl+클릭 → �
 
     // 5. 빈 곳 클릭 → 선택 해제
     await win.mouse.click(box.x + 20, box.y + 20)
-    expect(await selection(win)).toEqual({ instances: [], wires: [], junctions: [] })
+    expect(await selection(win)).toEqual({ instances: [], wires: [], junctions: [], notes: [] })
 
     // 6. 휠 버튼 드래그 / Space+드래그 → 화면만 이동 (문서는 그대로)
     const doc = await getProject(win)

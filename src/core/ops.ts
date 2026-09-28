@@ -13,12 +13,16 @@ import {
   type Project,
   type ProjectBom,
   type ProjectMeta,
-  type Wire
+  type Wire,
+  type Currency
 } from './model'
-import { instanceBounds, normalizeAngle, pinWorldPosition, type Point } from './geometry'
+import { instanceBounds, normalizeAngle, pinWorldPosition, type Point, type Rect } from './geometry'
 import { endExists, endInstanceId, endJunctionId, endPosition, findJunction, isJunctionEnd, isPinEnd, sameEnd } from './ends'
 import { minimalOrthogonalPoints, projectOnPath, simplifyBends, snapPoint, wirePath } from './wire'
 import { routeAll, type RouteObstacle, type RouteOptions, type RouteRequest } from './route'
+import { convertMoney, inProjectCurrency, projectCurrency, withCurrency } from './money'
+import { pruneSupplies } from './supply'
+import { moveNotes, removeNotes, resizeNotes } from './note'
 
 export { resolvePin } from './ends'
 
@@ -37,13 +41,19 @@ export function nextRefDes(project: Project, prefix: string): string {
   return `${prefix}${max + 1}`
 }
 
+/**
+ * 부품 정의를 배선도 통화로 맞춘 사본 (029). 단가를 환율로 바꾸고 currency 표시를 맞춘다.
+ * 환율이 없어 바꿀 수 없으면 단가를 뺀다 (BOM에 "단가 미입력"으로 보인다)
+ */
+export const partForProject = (project: Project, part: PartDef): PartDef => inProjectCurrency(project, part)
+
 /** 부품을 배치한다. 부품 정의가 프로젝트에 없으면 사본을 넣는다 */
 export function addInstance(
   project: Project,
   part: PartDef,
   at: { id: string; x: number; y: number }
 ): Project {
-  const parts = project.parts[part.id] ? project.parts : { ...project.parts, [part.id]: part }
+  const parts = project.parts[part.id] ? project.parts : { ...project.parts, [part.id]: partForProject(project, part) }
   const instance: PartInstance = {
     id: at.id,
     partId: part.id,
@@ -54,6 +64,35 @@ export function addInstance(
     scale: 1
   }
   return { ...project, parts, instances: [...project.instances, instance] }
+}
+
+/** 부품 배율 범위 (034) */
+export const SCALE_MIN = 0.2
+export const SCALE_MAX = 5
+/** ] / [ 키·버튼 한 번에 바뀌는 비율 */
+export const RESIZE_STEP = 1.1
+export const clampScale = (s: number) => Math.round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, s)) * 1000) / 1000
+
+/**
+ * 부품·글 상자 크기를 factor배로 (034). 부품은 중심, 글 상자는 왼쪽 위를 그대로 둔다.
+ * 범위 끝에 닿은 것은 거기서 멈춘다. 바뀐 게 없으면 같은 객체
+ */
+export function resizeItems(project: Project, items: { instances?: readonly string[]; notes?: readonly string[] }, factor: number): Project {
+  if (!(factor > 0) || factor === 1) return project
+  let next = project
+  const ids = new Set(items.instances ?? [])
+  if (ids.size > 0) {
+    let changed = false
+    const instances = project.instances.map((i) => {
+      if (!ids.has(i.id)) return i
+      const scale = clampScale(i.scale * factor)
+      if (scale === i.scale) return i
+      changed = true
+      return { ...i, scale }
+    })
+    if (changed) next = { ...next, instances }
+  }
+  return resizeNotes(next, items.notes ?? [], factor)
 }
 
 export type InstancePatch = Partial<Pick<PartInstance, 'x' | 'y' | 'rotation' | 'scale' | 'refDes'>>
@@ -110,7 +149,7 @@ export function disconnect(project: Project, wireId: string): Project {
   return cleanupJunctions({ ...project, wires: project.wires.filter((w) => w.id !== wireId) })
 }
 
-export type WirePatch = Partial<Pick<Wire, 'color' | 'width' | 'label' | 'points' | 'orthogonal' | 'awg' | 'length' | 'direction'>>
+export type WirePatch = Partial<Pick<Wire, 'color' | 'width' | 'label' | 'points' | 'orthogonal' | 'awg' | 'memo' | 'direction'>>
 
 export function updateWire(project: Project, wireId: string, patch: WirePatch): Project {
   return { ...project, wires: project.wires.map((w) => (w.id === wireId ? applyWirePatch(w, patch) : w)) }
@@ -124,7 +163,7 @@ function applyWirePatch(w: Wire, patch: WirePatch): Wire {
   if (!next.orthogonal) delete next.orthogonal
   if (next.awg === undefined) delete next.awg
   if (!next.direction) delete next.direction
-  if (next.length === undefined) delete next.length
+  if (!next.memo) delete next.memo
   return next
 }
 
@@ -153,6 +192,8 @@ export interface ItemIds {
   instances: readonly string[]
   wires: readonly string[]
   junctions?: readonly string[]
+  /** 글 상자 (032) */
+  notes?: readonly string[]
 }
 
 /** 부품(과 접속점)을 함께 옮긴다. 양 끝이 모두 움직이는 전선은 꺾임점도 옮겨 모양을 유지한다 */
@@ -161,9 +202,10 @@ export function moveInstances(
   ids: readonly string[],
   dx: number,
   dy: number,
-  junctionIds: readonly string[] = []
+  junctionIds: readonly string[] = [],
+  noteIds: readonly string[] = []
 ): Project {
-  if ((ids.length === 0 && junctionIds.length === 0) || (dx === 0 && dy === 0)) return project
+  if ((ids.length === 0 && junctionIds.length === 0 && noteIds.length === 0) || (dx === 0 && dy === 0)) return project
   const set = new Set(ids)
   const jset = new Set(junctionIds)
   const moving = (e: WireEnd) => (isPinEnd(e) ? set.has(e.instanceId) : jset.has(e.junctionId))
@@ -179,7 +221,78 @@ export function moveInstances(
   if (project.junctions && jset.size > 0) {
     next.junctions = project.junctions.map((j) => (jset.has(j.id) ? { ...j, x: j.x + dx, y: j.y + dy } : j))
   }
-  return next
+  return moveNotes(next, noteIds, dx, dy)
+}
+
+/** 부품마다 다른 만큼 옮긴다. 양 끝이 같은 만큼 움직이는 전선만 꺾임점도 옮긴다 */
+export function moveInstancesBy(project: Project, deltas: ReadonlyMap<string, Point>): Project {
+  const moved = [...deltas].filter(([, d]) => d.x !== 0 || d.y !== 0)
+  if (moved.length === 0) return project
+  const delta = new Map(moved)
+  const endDelta = (e: WireEnd) => (isPinEnd(e) ? delta.get(e.instanceId) : undefined)
+  return {
+    ...project,
+    instances: project.instances.map((i) => {
+      const d = delta.get(i.id)
+      return d ? { ...i, x: i.x + d.x, y: i.y + d.y } : i
+    }),
+    wires: project.wires.map((w) => {
+      const a = endDelta(w.from)
+      const b = endDelta(w.to)
+      if (!w.points || !a || !b || a.x !== b.x || a.y !== b.y) return w
+      return { ...w, points: w.points.map((p) => ({ x: p.x + a.x, y: p.y + a.y })) }
+    })
+  }
+}
+
+export type AlignMode = 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom' | 'distributeX' | 'distributeY'
+export const ALIGN_MODES: readonly AlignMode[] = ['left', 'centerX', 'right', 'top', 'centerY', 'bottom', 'distributeX', 'distributeY']
+
+/**
+ * 부품 줄 맞추기 (회전 반영 경계 상자 기준).
+ * 줄 맞추기는 2개 이상, 간격 맞추기는 3개 이상: 중심 순서대로 양 끝 부품은 그대로 두고 상자 사이 빈칸을 같게 한다
+ */
+export function alignInstances(project: Project, ids: readonly string[], mode: AlignMode): Project {
+  const set = new Set(ids)
+  const boxes = project.instances.flatMap((inst) => {
+    const part = set.has(inst.id) ? project.parts[inst.partId] : undefined
+    return part ? [{ id: inst.id, r: instanceBounds(inst, part) }] : []
+  })
+  const distribute = mode === 'distributeX' || mode === 'distributeY'
+  if (boxes.length < (distribute ? 3 : 2)) return project
+  const deltas = new Map<string, Point>()
+  if (distribute) {
+    const horizontal = mode === 'distributeX'
+    const start = (r: Rect) => (horizontal ? r.x : r.y)
+    const size = (r: Rect) => (horizontal ? r.width : r.height)
+    const sorted = [...boxes].sort((p, q) => start(p.r) + size(p.r) / 2 - (start(q.r) + size(q.r) / 2))
+    const first = sorted[0].r
+    const last = sorted[sorted.length - 1].r
+    const span = start(last) + size(last) - start(first)
+    const gap = (span - sorted.reduce((s, b) => s + size(b.r), 0)) / (sorted.length - 1)
+    let at = start(first)
+    for (const b of sorted) {
+      const d = at - start(b.r)
+      deltas.set(b.id, horizontal ? { x: d, y: 0 } : { x: 0, y: d })
+      at += size(b.r) + gap
+    }
+  } else {
+    const x0 = Math.min(...boxes.map((b) => b.r.x))
+    const x1 = Math.max(...boxes.map((b) => b.r.x + b.r.width))
+    const y0 = Math.min(...boxes.map((b) => b.r.y))
+    const y1 = Math.max(...boxes.map((b) => b.r.y + b.r.height))
+    for (const { id, r } of boxes) {
+      const d =
+        mode === 'left' ? { x: x0 - r.x, y: 0 }
+        : mode === 'right' ? { x: x1 - (r.x + r.width), y: 0 }
+        : mode === 'centerX' ? { x: (x0 + x1) / 2 - (r.x + r.width / 2), y: 0 }
+        : mode === 'top' ? { x: 0, y: y0 - r.y }
+        : mode === 'bottom' ? { x: 0, y: y1 - (r.y + r.height) }
+        : { x: 0, y: (y0 + y1) / 2 - (r.y + r.height / 2) }
+      deltas.set(id, d)
+    }
+  }
+  return moveInstancesBy(project, deltas)
 }
 
 /** 각 부품을 자기 중심 기준으로 회전한다 */
@@ -205,7 +318,7 @@ export function removeItems(project: Project, items: ItemIds): Project {
   }
   if (jset.size > 0 && next.junctions) next = withJunctions(next, next.junctions.filter((j) => !jset.has(j.id)))
   for (const id of items.instances) next = removeInstance(next, id)
-  return cleanupJunctions(next)
+  return pruneSupplies(cleanupJunctions(removeNotes(next, items.notes ?? [])))
 }
 
 export function updateWires(project: Project, ids: readonly string[], patch: WirePatch): Project {
@@ -219,8 +332,9 @@ export function updateWires(project: Project, ids: readonly string[], patch: Wir
  * 프로젝트에 들어 있는 부품 정의 사본을 새 정의로 바꾼다.
  * 새 정의에 없는 핀에 연결돼 있던 전선은 지우고 그 수를 알려 준다.
  */
-export function replacePartDef(project: Project, part: PartDef): { project: Project; removedWires: number } {
-  if (!project.parts[part.id]) return { project, removedWires: 0 }
+export function replacePartDef(project: Project, source: PartDef): { project: Project; removedWires: number } {
+  if (!project.parts[source.id]) return { project, removedWires: 0 }
+  const part = partForProject(project, source)
   const pinIds = new Set(part.pins.map((p) => p.id))
   const usesPart = new Set(project.instances.filter((i) => i.partId === part.id).map((i) => i.id))
   const dangling = (r: WireEnd) => isPinEnd(r) && usesPart.has(r.instanceId) && !pinIds.has(r.pinId)
@@ -363,7 +477,7 @@ export function routeWires(project: Project, wireIds: readonly string[], options
 }
 
 /** 부품 사본에서 고칠 수 있는 스펙. 문자열을 비우거나 undefined면 필드를 지운다 */
-export type PartSpecPatch = Partial<Pick<PartDef, 'name' | 'partNumber' | 'manufacturer' | 'memo' | 'purchaseUrl' | 'unitPrice'>>
+export type PartSpecPatch = Partial<Pick<PartDef, 'name' | 'partNumber' | 'manufacturer' | 'memo' | 'purchaseUrl' | 'supplier' | 'unitPrice'>>
 
 /**
  * 이 배선도의 부품 사본 스펙을 고친다 (같은 부품을 쓰는 배치 전부에 적용). 라이브러리는 그대로.
@@ -401,7 +515,10 @@ function withBom(project: Project, bom: ProjectBom): Project {
   const clean: ProjectBom = {}
   if (bom.overrides && Object.keys(bom.overrides).length > 0) clean.overrides = bom.overrides
   if (bom.items && bom.items.length > 0) clean.items = bom.items
-  if (clean.overrides || clean.items) next.bom = clean
+  if (bom.supplies && Object.keys(bom.supplies).length > 0) clean.supplies = bom.supplies
+  if (bom.currency && bom.currency !== 'KRW') clean.currency = bom.currency
+  if (bom.exchangeRate !== undefined) clean.exchangeRate = bom.exchangeRate
+  if (Object.keys(clean).length > 0) next.bom = clean
   else delete next.bom
   return next
 }
@@ -415,14 +532,15 @@ function compact<T extends object>(o: T): T {
   return out
 }
 
-export type BomOverridePatch = { unitPrice?: number | null; memo?: string | null }
+export type BomOverridePatch = { unitPrice?: number | null; memo?: string | null; supplier?: string | null }
 
-/** 배선도 부품 행의 단가·비고. null은 지운다 (단가는 부품 기본 단가로 돌아감) */
+/** 배선도 부품 행의 단가·비고·조달처. null은 지운다 (단가는 부품 기본 단가로 돌아감) */
 export function setBomOverride(project: Project, partId: string, patch: BomOverridePatch): Project {
   const overrides = { ...(project.bom?.overrides ?? {}) }
   const merged = { ...overrides[partId] } as BomOverride
   if (patch.unitPrice !== undefined) merged.unitPrice = patch.unitPrice ?? undefined
   if (patch.memo !== undefined) merged.memo = patch.memo?.trim() || undefined
+  if (patch.supplier !== undefined) merged.supplier = patch.supplier?.trim() || undefined
   const o = compact(merged)
   if (Object.keys(o).length > 0) overrides[partId] = o
   else delete overrides[partId]
@@ -442,6 +560,40 @@ export function updateBomItem(project: Project, id: string, patch: BomItemPatch)
 
 export function removeBomItem(project: Project, id: string): Project {
   return withBom(project, { ...project.bom, items: (project.bom?.items ?? []).filter((it) => it.id !== id) })
+}
+
+/**
+ * BOM 통화·환율 (029). 통화가 바뀌면 배선도 안의 모든 단가(부품 사본, BOM 수정값, 직접 추가 항목)를 환율로 환산한다.
+ * rate = 1 USD의 원화 값, 0보다 커야 한다 (아니면 그대로). 실행 취소 1회
+ */
+export function setBomCurrency(project: Project, currency: Currency, rate: number): Project {
+  if (!(Number.isFinite(rate) && rate > 0)) return project
+  const from = projectCurrency(project)
+  const bom: ProjectBom = { ...project.bom, currency, exchangeRate: rate }
+  if (from === currency) {
+    return project.bom?.exchangeRate === rate ? project : withBom(project, bom)
+  }
+  const conv = (v: number) => convertMoney(v, from, currency, rate)!
+  // 사본은 모두 배선도 통화(from)로 되어 있다
+  const parts = Object.fromEntries(Object.entries(project.parts).map(([id, p]) => [id, withCurrency(p, currency, rate)]))
+  if (project.bom?.overrides) {
+    bom.overrides = Object.fromEntries(
+      Object.entries(project.bom.overrides).map(([k, o]) => [k, o.unitPrice === undefined ? o : { ...o, unitPrice: conv(o.unitPrice) }])
+    )
+  }
+  if (project.bom?.items) {
+    bom.items = project.bom.items.map((it) => (it.unitPrice === undefined ? it : { ...it, unitPrice: conv(it.unitPrice) }))
+  }
+  if (project.bom?.supplies) {
+    bom.supplies = Object.fromEntries(
+      Object.entries(project.bom.supplies).map(([k, c]) => [k, c.unitPrice === undefined ? c : { ...c, unitPrice: conv(c.unitPrice) }])
+    )
+  }
+  const next: Project = { ...project, parts }
+  if (project.supplies) {
+    next.supplies = Object.fromEntries(Object.entries(project.supplies).map(([id, s]) => [id, withCurrency(s, currency, rate)]))
+  }
+  return withBom(next, bom)
 }
 
 // ---------------------------------------------------------------- 접속점 (전선 중간 분기)

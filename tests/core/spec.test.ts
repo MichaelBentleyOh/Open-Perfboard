@@ -29,24 +29,48 @@ describe('부품 사본 스펙 편집 (이 배선도만)', () => {
   })
 })
 
-describe('전선 규격(AWG)·길이 (파일 v4)', () => {
+describe('v6 → v7: 전선 길이(mm)는 메모로 옮긴다', () => {
+  const v6 = () => {
+    const raw = JSON.parse(serializeProject(loadSample()))
+    raw.version = 6
+    return raw
+  }
+  it('길이만 있으면 메모 = "L=250 mm", 메모가 있으면 뒤에 붙인다', () => {
+    const raw = v6()
+    raw.wires[0].length = 250
+    raw.wires[1].length = 120.5
+    raw.wires[1].memo = '꼬아서'
+    const r = parseProject(JSON.stringify(raw))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.version).toBe(PROJECT_FILE_VERSION)
+    expect(r.value.wires[0].memo).toBe('L=250 mm')
+    expect(r.value.wires[1].memo).toBe('꼬아서 · L=120.5 mm')
+    expect(r.value.wires.some((w) => 'length' in w)).toBe(false)
+  })
+  it('길이가 숫자가 아니면 버리고 파일은 열린다', () => {
+    const raw = v6()
+    raw.wires[0].length = 'abc'
+    const r = parseProject(JSON.stringify(raw))
+    expect(r.ok && r.value.wires[0].memo).toBe(undefined)
+  })
+})
+
+describe('전선 규격(AWG)·메모', () => {
   it('저장·열기 왕복, 비우면 필드 삭제', () => {
-    const p = updateWires(loadSample(), ['w1'], { awg: 22, length: 350.5 })
+    const p = updateWires(loadSample(), ['w1'], { awg: 22, memo: 'L=350.5 mm' })
     const again = parseProject(serializeProject(p))
-    expect(again.ok && again.value.wires.find((w) => w.id === 'w1')).toMatchObject({ awg: 22, length: 350.5 })
-    const cleared = updateWires(p, ['w1'], { awg: undefined, length: undefined }).wires.find((w) => w.id === 'w1')!
-    expect('awg' in cleared || 'length' in cleared).toBe(false)
+    expect(again.ok && again.value.wires.find((w) => w.id === 'w1')).toMatchObject({ awg: 22, memo: 'L=350.5 mm' })
+    const cleared = updateWires(p, ['w1'], { awg: undefined, memo: '' }).wires.find((w) => w.id === 'w1')!
+    expect('awg' in cleared || 'memo' in cleared).toBe(false)
     expect(PROJECT_FILE_VERSION).toBeGreaterThanOrEqual(4)
   })
 
-  it('범위 밖·소수 AWG, 음수 길이는 거부', () => {
+  it('범위 밖·소수 AWG는 거부', () => {
     const raw = JSON.parse(serializeProject(loadSample()))
     raw.wires[0].awg = 40
     expect(errorsOf(parseProject(JSON.stringify(raw)))).toContain('wires[0].awg: 범위를 벗어났습니다 (40)')
     raw.wires[0].awg = 22.5
     expect(errorsOf(parseProject(JSON.stringify(raw)))).toContain('wires[0].awg: 정수여야 합니다')
-    raw.wires[0].awg = 22
-    raw.wires[0].length = -1
-    expect(errorsOf(parseProject(JSON.stringify(raw)))).toContain('wires[0].length: 범위를 벗어났습니다 (-1)')
   })
 })

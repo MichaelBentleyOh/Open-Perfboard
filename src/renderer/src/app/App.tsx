@@ -5,6 +5,12 @@ import { ZoomInput } from '@/features/canvas/ZoomInput'
 import { HelpDialog } from '@/features/help/HelpDialog'
 import { BusyOverlay } from '@/components/BusyOverlay'
 import { RecoveryDialog } from '@/features/recovery/RecoveryDialog'
+import { scopedSheets, useSheets, useWorkspaceStore } from '@/stores/workspaceStore'
+import type { Project } from '@core/model'
+import { SheetTabs } from '@/features/sheets/SheetTabs'
+import { SearchBox } from '@/features/search/SearchBox'
+import { GridSnapControl } from '@/features/canvas/GridSnapControl'
+import { addTextBox } from './editCommands'
 import { LibraryPanel } from '@/features/library/LibraryPanel'
 import { ColorPicker, PropertiesPanel } from '@/features/properties/PropertiesPanel'
 import { NetlistView } from '@/features/reports/Reports'
@@ -40,6 +46,7 @@ export default function App() {
   const leftCollapsed = useSettingsStore((s) => s.leftCollapsed)
   const rightCollapsed = useSettingsStore((s) => s.rightCollapsed)
   const [tab, setTab] = useState<BottomTab>('diagram')
+  const searchOpen = useUiStore((s) => s.searchOpen)
   const [zoom, setZoom] = useState(1)
   const project = useProjectStore((s) => s.project)
   const name = documentName(useDocumentStore((s) => s.filePath))
@@ -116,10 +123,15 @@ export default function App() {
     fn()
   }
 
+  // BOM·결선표 개수는 포함할 배선도 기준 (030)
+  const sheets = useSheets()
+  const scope = useWorkspaceStore((s) => s.scope)
+  const inScope = scopedSheets(sheets, scope)
+  const count = (fn: (p: Project) => number) => inScope.reduce((n, s) => n + fn(s.project), 0)
   const tabs: { id: BottomTab; label: string }[] = [
     { id: 'diagram', label: t('배선도') },
-    { id: 'bom', label: `BOM (${project.instances.length + (project.bom?.items?.length ?? 0)})` },
-    { id: 'netlist', label: t('결선표 ({n})', { n: project.wires.length }) }
+    { id: 'bom', label: `BOM (${count((p) => p.instances.length + (p.bom?.items?.length ?? 0))})` },
+    { id: 'netlist', label: t('결선표 ({n})', { n: count((p) => p.wires.length) }) }
   ]
 
   return (
@@ -159,6 +171,18 @@ export default function App() {
         <div className="toolbar-group">
           <button onClick={tidyWiring} title={t('배선 정리: 부품을 피하고 겹치지 않는 직각 경로로 다시 그리기 (선택한 것만, 없으면 전체)')}>
             {t('⌁ 배선 정리')}
+          </button>
+          <button
+            onClick={() => {
+              setTab('diagram')
+              requestAnimationFrame(addTextBox)
+            }}
+            title={t('글 상자 추가 (T): 화면 가운데에 만들고 바로 입력')}
+          >
+            {t('T 글 상자')}
+          </button>
+          <button onClick={() => useUiStore.getState().setSearchOpen(true)} title={t('부품·신호 찾기 (Ctrl+F)')} aria-label={t('찾기')}>
+            {t('⌕ 찾기')}
           </button>
         </div>
         {/* 새 전선 설정은 배선 모드에서만 */}
@@ -318,10 +342,13 @@ export default function App() {
           )}
           {tab === 'diagram' && (
             <div className="zoom-float">
+              <GridSnapControl />
               <ZoomInput zoom={zoom} />
             </div>
           )}
+          {searchOpen && <SearchBox onShowDiagram={() => setTab('diagram')} />}
         </div>
+        <SheetTabs />
       </main>
 
       {rightCollapsed ? (

@@ -23,7 +23,8 @@ test('저장 → 새로 만들기 → 열기 → BOM·결선표 → 내보내기
     await win.keyboard.press('Control+s')
     await expect(docName).toHaveText('로봇 하네스')
     const saved = parseProject(readFileSync(opb, 'utf8'))
-    expect(saved.ok && saved.value.name).toBe('로봇 하네스')
+    // 배선도 이름은 아래 탭의 이름 (파일 이름과 따로, 030)
+    expect(saved.ok && saved.value.name).toBe('배선도 1')
     expect(saved.ok && saved.value.instances.map((i) => i.refDes)).toEqual(['U1', 'U2'])
 
     // 3. 실행 취소 → 변경 상태, 다시 실행 → 저장 시점과 같아져서 깨끗한 상태
@@ -60,9 +61,9 @@ test('저장 → 새로 만들기 → 열기 → BOM·결선표 → 내보내기
     await bom.getByRole('button', { name: 'CSV 내보내기' }).click()
     await expect(win.getByRole('status')).toContainText('내보냈습니다')
     expect(readFileSync(bomCsv, 'utf8')).toBe(
-      '﻿참조명,이름,품번,제조사,수량,단가,금액,구매 링크,비고\r\n' +
-        '"U1, U2",테스트 MCU,TM-01,,2,,,,\r\n' +
-        '합계,,,,2,,0,,단가 미입력 1건\r\n'
+      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매사이트,비고\r\n' +
+        '1,부품,테스트 MCU,"TM-01 · U1, U2",2,,,,,\r\n' +
+        '합계,,,,2,,0,,,단가 미입력 1건\r\n'
     )
 
     // 8. 결선표 탭 + CSV

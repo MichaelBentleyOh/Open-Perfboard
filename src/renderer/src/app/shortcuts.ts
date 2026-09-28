@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react'
 import { SHORTCUTS, matchCombo, type ShortcutId } from '@core/keymap'
 import { redo, undo, useProjectStore } from '@/stores/projectStore'
 import { selectionCount, useUiStore } from '@/stores/uiStore'
+import { RESIZE_STEP } from '@core/ops'
 import { canvasZoom } from '@/features/canvas/canvasZoom'
 import { newDocument, openDocument, saveDocument } from './fileCommands'
-import { copy, cut, paste } from './editCommands'
+import { addTextBox, copy, cut, paste } from './editCommands'
 
 /** 동작. false를 돌려주면 "할 일 없음" → 같은 키의 다음 항목으로 넘어간다 */
 type Handler = () => void | false
@@ -16,6 +17,11 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
   const withParts = (fn: (ids: string[]) => void): Handler => () => {
     if (instances().length === 0) return false
     fn(instances())
+  }
+  const resize = (factor: number): Handler => () => {
+    const { instances, notes } = ui().selection
+    if (instances.length === 0 && notes.length === 0) return false
+    store().resizeItems({ instances, notes }, factor)
   }
   const zoom = (fn: (z: NonNullable<ReturnType<typeof canvasZoom>>) => void): Handler => () => {
     const z = canvasZoom()
@@ -34,8 +40,8 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
     cut,
     paste,
     selectAll: () => {
-      const { instances, wires, junctions = [] } = store().project
-      ui().select({ instances: instances.map((i) => i.id), wires: wires.map((w) => w.id), junctions: junctions.map((j) => j.id) })
+      const { instances, wires, junctions = [], notes = [] } = store().project
+      ui().select({ instances: instances.map((i) => i.id), wires: wires.map((w) => w.id), junctions: junctions.map((j) => j.id), notes: notes.map((n) => n.id) })
     },
     wireBack: () => {
       if (!ui().wireStart) return false
@@ -61,11 +67,15 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
     rotateBack: withParts((ids) => store().rotateInstances(ids, -90)),
     flipH: withParts((ids) => store().flipInstances(ids, 'horizontal')),
     flipV: withParts((ids) => store().flipInstances(ids, 'vertical')),
+    grow: resize(RESIZE_STEP),
+    shrink: resize(1 / RESIZE_STEP),
     zoom100: zoom((z) => z.setZoom(1)),
     zoomIn: zoom((z) => z.step(1)),
     zoomOut: zoom((z) => z.step(-1)),
     fit: zoom((z) => z.fit()),
-    help: () => ui().setHelpOpen(true)
+    help: () => ui().setHelpOpen(true),
+    textBox: () => addTextBox(),
+    search: () => ui().setSearchOpen(true)
   }
 }
 

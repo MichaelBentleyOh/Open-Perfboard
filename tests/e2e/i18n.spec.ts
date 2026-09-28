@@ -53,7 +53,7 @@ test('한국어 ↔ 영어 전환: 화면·내보내기·대화상자, 다시 �
     await bom.getByRole('button', { name: 'Export CSV' }).click()
     await expect(win.getByRole('status')).toContainText('Exported: bom.csv')
     const csv = readFileSync(csvPath, 'utf8')
-    expect(csv.startsWith('﻿Ref,Name,Part No.,Manufacturer,Qty,Unit price,Amount,Purchase link,Notes\r\n')).toBe(true)
+    expect(csv.startsWith('﻿No.,Category,Item,Details,Qty,Est. unit price,Est. total,Supplier,Purchase site,Notes\r\n')).toBe(true)
     expect(csv).toContain('Total,')
 
     // 5. 결선표 탭

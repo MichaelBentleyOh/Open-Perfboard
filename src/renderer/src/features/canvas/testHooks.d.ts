@@ -7,7 +7,7 @@ declare global {
     /** E2E·디버깅용 읽기 전용 훅 (CanvasView가 등록) */
     __opbCanvas?: {
       getProject: () => Project
-      getSelection: () => { instances: string[]; wires: string[]; junctions: string[] }
+      getSelection: () => { instances: string[]; wires: string[]; junctions: string[]; notes: string[] }
       /** 핀의 화면(client) 좌표 */
       pinClientPosition: (instanceId: string, pinId: string) => ClientPoint | null
       /** 월드 좌표 → 화면(client) 좌표 */

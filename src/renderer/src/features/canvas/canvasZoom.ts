@@ -6,6 +6,10 @@ export interface CanvasZoom {
   step: (dir: 1 | -1) => void
   /** 모든 내용이 보이게 맞춘다. 비어 있으면 100% */
   fit: () => void
+  /** 지금 화면 가운데의 월드 좌표 (새 글 상자 위치 등) */
+  center: () => { x: number; y: number }
+  /** 이 월드 좌표가 화면 가운데에 오게 옮긴다 (검색 결과로 가기). 배율이 너무 작으면 100%로 */
+  centerOn: (p: { x: number; y: number }) => void
 }
 
 let current: CanvasZoom | null = null

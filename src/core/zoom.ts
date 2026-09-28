@@ -1,4 +1,5 @@
 // 캔버스 배율 계산. 화면 좌표 = 월드 좌표 × scale + (x, y)
+import { noteBounds } from './note'
 import type { Project } from './model'
 import { instanceBounds, type Point, type Rect } from './geometry'
 import { endPosition } from './ends'
@@ -69,6 +70,11 @@ export function contentBounds(project: Project): Rect | undefined {
     add({ x: r.x + r.width, y: r.y + r.height })
   }
   for (const j of project.junctions ?? []) add(j)
+  for (const n of project.notes ?? []) {
+    const r = noteBounds(n)
+    add(r)
+    add({ x: r.x + r.width, y: r.y + r.height })
+  }
   for (const w of project.wires) {
     const a = endPosition(project, w.from)
     const b = endPosition(project, w.to)

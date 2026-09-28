@@ -48,7 +48,7 @@ test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 �
   }
 
   // 파일로 저장됐는지 확인
-  const files = readdirSync(libDir)
+  const files = readdirSync(libDir).filter((f) => f.endsWith('.json'))
   expect(files).toHaveLength(1)
   const saved = JSON.parse(readFileSync(join(libDir, files[0]), 'utf8'))
   expect(saved.name).toBe('테스트 보드')

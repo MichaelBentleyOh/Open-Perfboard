@@ -58,22 +58,24 @@ describe('선택 사각형', () => {
   it('겹치는 부품과, 양 끝이 모두 안에 있는 전선만 고른다', () => {
     const p = loadSample()
     // U1만 덮는 사각형: 부품 U1, 전선 없음 (전선의 다른 끝은 CN1)
-    expect(selectInRect(p, rectFromPoints({ x: -50, y: -50 }, { x: 150, y: 250 }))).toEqual({ instances: ['i1'], wires: [], junctions: [] })
+    expect(selectInRect(p, rectFromPoints({ x: -50, y: -50 }, { x: 150, y: 250 }))).toEqual({ instances: ['i1'], wires: [], junctions: [], notes: [] })
     // 둘 다 덮는 사각형: 부품 2개, 전선 2개
     expect(selectInRect(p, rectFromPoints({ x: 600, y: 300 }, { x: -100, y: -100 }))).toEqual({
       instances: ['i1', 'i2'],
       wires: ['w1', 'w2'],
-      junctions: []
+      junctions: [],
+      notes: []
     })
     // 빈 곳
-    expect(selectInRect(p, rectFromPoints({ x: 1000, y: 1000 }, { x: 1100, y: 1100 }))).toEqual({ instances: [], wires: [], junctions: [] })
+    expect(selectInRect(p, rectFromPoints({ x: 1000, y: 1000 }, { x: 1100, y: 1100 }))).toEqual({ instances: [], wires: [], junctions: [], notes: [] })
   })
 
   it('mergeSelection: 중복 없이 합친다', () => {
     expect(mergeSelection({ instances: ['a'], wires: ['w'] }, { instances: ['a', 'b'], wires: [] })).toEqual({
       instances: ['a', 'b'],
       wires: ['w'],
-      junctions: []
+      junctions: [],
+      notes: []
     })
   })
 })

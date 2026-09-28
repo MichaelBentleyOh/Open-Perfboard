@@ -16,11 +16,19 @@ import {
   type BomItem,
   type BomOverride,
   type Junction,
+  type Note,
   type WireEnd,
   type Project,
   type ProjectBom,
   type ProjectMeta,
-  type Wire
+  type Wire,
+  CURRENCIES,
+  type Currency,
+  SUPPLY_KINDS,
+  type Supply,
+  type SupplyChoice,
+  type SupplyKind,
+  type WireTubes
 } from './model'
 import { isHttpUrl } from './url'
 import { ATTACHMENT_ID, isAttachmentType, type AttachmentData } from './attachment'
@@ -134,6 +142,23 @@ export function readPartValue(v: unknown, t: T = ko): ParseResult<PartDef> {
   return part && errors.length === 0 ? { ok: true, value: part } : { ok: false, errors: errors.items }
 }
 
+export function serializeSupply(supply: Supply): string {
+  return JSON.stringify(supply, null, 2)
+}
+
+export function parseSupply(text: string, t: T = ko): ParseResult<Supply> {
+  const raw = parseJson(text, t)
+  if (!raw.ok) return raw
+  return readSupplyValue(raw.value, t)
+}
+
+/** 이미 JSON으로 읽은 값을 부속 부품으로 검증한다 (.opblib의 supplies 각 항목) */
+export function readSupplyValue(v: unknown, t: T = ko): ParseResult<Supply> {
+  const errors = collector(t)
+  const supply = readSupply(v, '', errors)
+  return supply && errors.length === 0 ? { ok: true, value: supply } : { ok: false, errors: errors.items }
+}
+
 // ---------------------------------------------------------------- 마이그레이션
 
 /** 버전별 변환. 키 N은 vN → vN+1. 포맷을 바꾸면 여기에 추가하고 테스트를 쓴다 */
@@ -147,7 +172,23 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v4 → v5: 부품 첨부(attachments)와 첨부 본문(attachmentData)이 생김. 없는 파일은 그대로
   4: (raw) => ({ ...raw, version: 5 }),
   // v5 → v6: 전선 신호 방향(direction)이 생김. 없는 전선은 양방향
-  5: (raw) => ({ ...raw, version: 6 })
+  5: (raw) => ({ ...raw, version: 6 }),
+  // v7: 전선 길이(mm) 칸을 없애고 메모로 옮긴다 (027), BOM 통화·환율 (029)
+  6: migrateWireLength
+}
+
+/** v6 → v7: 전선 길이(length, mm)를 메모 뒤에 "L=250 mm"로 옮긴다 (값을 잃지 않게) */
+function migrateWireLength(raw: Record<string, unknown>): Record<string, unknown> {
+  const wires = Array.isArray(raw.wires)
+    ? raw.wires.map((w: unknown) => {
+        if (!isObject(w) || w.length === undefined) return w
+        const { length, ...rest } = w
+        if (typeof length !== 'number' || !Number.isFinite(length)) return rest
+        const memo = typeof rest.memo === 'string' && rest.memo.trim() ? `${rest.memo} · ` : ''
+        return { ...rest, memo: `${memo}L=${length} mm` }
+      })
+    : raw.wires
+  return { ...raw, wires, version: 7 }
 }
 
 function migrate(raw: unknown, errors: Errors): Record<string, unknown> | undefined {
@@ -207,6 +248,12 @@ function readProject(o: Record<string, unknown>, errors: Errors): Project | unde
     checkUnique(junctions, 'junctions', errors)
   }
 
+  let notes: Note[] = []
+  if (o.notes !== undefined) {
+    notes = list(o, 'notes', '', errors, (v, p) => readNote(v, p, errors))
+    checkUnique(notes, 'notes', errors)
+  }
+
   const junctionIds = new Set(junctions.map((j) => j.id))
   const instanceById = new Map(instances.map((i) => [i.id, i]))
   const endExists = (ref: WireEnd) => {
@@ -230,12 +277,77 @@ function readProject(o: Record<string, unknown>, errors: Errors): Project | unde
 
   const bom = o.bom === undefined ? undefined : readBom(o.bom, errors)
 
+  const supplies: Record<string, Supply> = {}
+  if (o.supplies !== undefined) {
+    if (!isObject(o.supplies)) errors.push('{path}: 객체가 아닙니다', { path: 'supplies' })
+    else {
+      for (const [key, value] of Object.entries(o.supplies)) {
+        const s = readSupply(value, `supplies.${key}.`, errors)
+        if (!s) continue
+        if (s.id !== key) errors.push("{path}: 키와 id가 다릅니다 ('{id}')", { path: `supplies.${key}.id`, id: s.id })
+        supplies[key] = s
+      }
+    }
+  }
+  // 사본이 없는 부속 부품 참조는 오류 대신 뺀다 (전선 모양·연결은 그대로 열리게)
+  const has = (id: string | undefined, kind: SupplyKind) => id !== undefined && supplies[id]?.kind === kind
+  wires.forEach((w, i) => {
+    if (w.supplyId !== undefined && !has(w.supplyId, 'wire')) delete w.supplyId
+    if (w.tubes) {
+      const tubes: WireTubes = {}
+      if (has(w.tubes.ends, 'tube')) tubes.ends = w.tubes.ends
+      if (has(w.tubes.middle, 'tube')) tubes.middle = w.tubes.middle
+      if (tubes.ends || tubes.middle) wires[i] = { ...w, tubes }
+      else delete w.tubes
+    }
+  })
+
   if (name === undefined) return undefined
   return {
     version: PROJECT_FILE_VERSION, name, parts, instances, wires,
     ...(junctions.length > 0 ? { junctions } : {}),
+    ...(notes.length > 0 ? { notes } : {}),
     ...(meta ? { meta } : {}),
-    ...(bom ? { bom } : {})
+    ...(bom ? { bom } : {}),
+    ...(Object.keys(supplies).length > 0 ? { supplies } : {})
+  }
+}
+
+function readSupply(v: unknown, path: string, errors: Errors): Supply | undefined {
+  if (!isObject(v)) return notObject(path || 'supply', errors)
+  const id = str(v, 'id', path, errors)
+  const name = str(v, 'name', path, errors)
+  const kind = v.kind
+  const kindOk = SUPPLY_KINDS.includes(kind as SupplyKind)
+  if (!kindOk) errors.push("{path}: 'housing', 'terminal', 'tube', 'wire' 중 하나여야 합니다", { path: `${path}kind` })
+  const unitPrice = optPrice(v, 'unitPrice', path, errors)
+  const purchase = optStr(v, 'purchaseUrl', path, errors)
+  if (purchase.purchaseUrl !== undefined && !isHttpUrl(purchase.purchaseUrl)) {
+    errors.push('{path}: http:// 또는 https:// 주소여야 합니다', { path: `${path}purchaseUrl` })
+  }
+  const image = v.image === undefined ? undefined : readImage(v.image, `${path}image.`, errors)
+  const diameter = v.diameter === undefined ? undefined : num(v, 'diameter', path, errors, { min: Number.MIN_VALUE })
+  const awg = v.awg === undefined ? undefined : num(v, 'awg', path, errors, { min: AWG_MIN, max: AWG_MAX })
+  if (awg !== undefined && !Number.isInteger(awg)) errors.push('{path}: 정수여야 합니다', { path: `${path}awg` })
+  if (id === undefined || name === undefined || !kindOk) return undefined
+  return {
+    id,
+    kind: kind as SupplyKind,
+    name,
+    ...optStr(v, 'partNumber', path, errors),
+    ...optStr(v, 'manufacturer', path, errors),
+    ...purchase,
+    ...optStr(v, 'supplier', path, errors),
+    ...(unitPrice !== undefined ? { unitPrice } : {}),
+    ...optCurrency(v, path, errors),
+    ...optStr(v, 'memo', path, errors),
+    ...(image ? { image } : {}),
+    ...optStr(v, 'connectorType', path, errors),
+    ...optStr(v, 'terminalId', path, errors),
+    ...(diameter !== undefined ? { diameter } : {}),
+    ...optStr(v, 'color', path, errors),
+    ...(awg !== undefined ? { awg } : {}),
+    ...optStr(v, 'pack', path, errors)
   }
 }
 
@@ -275,7 +387,9 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
     ...optStr(v, 'memo', path, errors),
     ...optStr(v, 'refPrefix', path, errors),
     ...purchase,
+    ...optStr(v, 'supplier', path, errors),
     ...(unitPrice !== undefined ? { unitPrice } : {}),
+    ...optCurrency(v, path, errors),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
     image,
     connectors,
@@ -377,10 +491,17 @@ function readWire(v: unknown, path: string, errors: Errors): Wire | undefined {
   if (orthogonal !== undefined && typeof orthogonal !== 'boolean') errors.push('{path}: true/false여야 합니다', { path: `${path}orthogonal` })
   const awg = v.awg === undefined ? undefined : num(v, 'awg', path, errors, { min: AWG_MIN, max: AWG_MAX })
   if (awg !== undefined && !Number.isInteger(awg)) errors.push('{path}: 정수여야 합니다', { path: `${path}awg` })
-  const length = v.length === undefined ? undefined : num(v, 'length', path, errors, { min: 0 })
   const direction = v.direction
   const directionOk = direction === undefined || WIRE_DIRECTIONS.includes(direction as WireDirection)
   if (!directionOk) errors.push("{path}: 'forward' 또는 'reverse'여야 합니다", { path: `${path}direction` })
+  let tubes: WireTubes | undefined
+  if (v.tubes !== undefined) {
+    if (!isObject(v.tubes)) notObject(`${path}tubes`, errors)
+    else {
+      const tb = { ...optStr(v.tubes, 'ends', `${path}tubes.`, errors), ...optStr(v.tubes, 'middle', `${path}tubes.`, errors) }
+      if (tb.ends !== undefined || tb.middle !== undefined) tubes = tb
+    }
+  }
   if (id === undefined || !from || !to || color === undefined || width === undefined) return undefined
   return {
     id, from, to, color, width,
@@ -388,8 +509,10 @@ function readWire(v: unknown, path: string, errors: Errors): Wire | undefined {
     ...(points && points.length > 0 ? { points } : {}),
     ...(orthogonal === true ? { orthogonal: true } : {}),
     ...(awg !== undefined ? { awg } : {}),
-    ...(length !== undefined ? { length } : {}),
-    ...(directionOk && direction !== undefined ? { direction: direction as WireDirection } : {})
+    ...optStr(v, 'memo', path, errors),
+    ...(directionOk && direction !== undefined ? { direction: direction as WireDirection } : {}),
+    ...optStr(v, 'supplyId', path, errors),
+    ...(tubes ? { tubes } : {})
   }
 }
 
@@ -409,6 +532,18 @@ function readJunction(v: unknown, path: string, errors: Errors): Junction | unde
   const x = num(v, 'x', path, errors)
   const y = num(v, 'y', path, errors)
   return id !== undefined && label !== undefined && x !== undefined && y !== undefined ? { id, label, x, y } : undefined
+}
+
+function readNote(v: unknown, path: string, errors: Errors): Note | undefined {
+  if (!isObject(v)) return notObject(path, errors)
+  const id = str(v, 'id', path, errors)
+  const x = num(v, 'x', path, errors)
+  const y = num(v, 'y', path, errors)
+  const width = num(v, 'width', path, errors, { min: 1 })
+  const text = str(v, 'text', path, errors)
+  const fontSize = v.fontSize === undefined ? undefined : num(v, 'fontSize', path, errors, { min: 4, max: 200 })
+  if (id === undefined || x === undefined || y === undefined || width === undefined || text === undefined) return undefined
+  return { id, x, y, width, text, ...(fontSize !== undefined ? { fontSize } : {}), ...optStr(v, 'color', path, errors) }
 }
 
 function readPinRef(v: unknown, path: string, errors: Errors): PinRef | undefined {
@@ -432,7 +567,7 @@ function readBom(v: unknown, errors: Errors): ProjectBom | undefined {
         }
         const p = `bom.overrides.${key}.`
         const unitPrice = optPrice(o, 'unitPrice', p, errors)
-        overrides[key] = { ...(unitPrice !== undefined ? { unitPrice } : {}), ...optStr(o, 'memo', p, errors) }
+        overrides[key] = { ...(unitPrice !== undefined ? { unitPrice } : {}), ...optStr(o, 'memo', p, errors), ...optStr(o, 'supplier', p, errors) }
       }
       bom.overrides = overrides
     }
@@ -453,13 +588,58 @@ function readBom(v: unknown, errors: Errors): ProjectBom | undefined {
         ...optStr(it, 'manufacturer', p, errors),
         ...(unitPrice !== undefined ? { unitPrice } : {}),
         ...url,
-        ...optStr(it, 'memo', p, errors)
+        ...optStr(it, 'memo', p, errors),
+        ...optStr(it, 'supplier', p, errors)
       }
       return item
     })
     checkUnique(bom.items, 'bom.items', errors)
   }
+  if (v.supplies !== undefined) {
+    if (!isObject(v.supplies)) errors.push('{path}: 객체가 아닙니다', { path: 'bom.supplies' })
+    else {
+      const choices: Record<string, SupplyChoice> = {}
+      for (const [key, c] of Object.entries(v.supplies)) {
+        const p = `bom.supplies.${key}.`
+        if (!isObject(c)) {
+          notObject(p.slice(0, -1), errors)
+          continue
+        }
+        if (typeof c.include !== 'boolean') {
+          errors.push('{path}: true/false여야 합니다', { path: `${p}include` })
+          continue
+        }
+        const quantity = c.quantity === undefined ? undefined : num(c, 'quantity', p, errors, { min: 0 })
+        const unitPrice = optPrice(c, 'unitPrice', p, errors)
+        choices[key] = {
+          include: c.include,
+          ...(quantity !== undefined ? { quantity } : {}),
+          ...(unitPrice !== undefined ? { unitPrice } : {}),
+          ...optStr(c, 'memo', p, errors),
+          ...optStr(c, 'supplier', p, errors)
+        }
+      }
+      if (Object.keys(choices).length > 0) bom.supplies = choices
+    }
+  }
+  const { currency } = optCurrency(v, 'bom.', errors)
+  if (currency && currency !== 'KRW') bom.currency = currency
+  if (v.exchangeRate !== undefined) {
+    const rate = num(v, 'exchangeRate', 'bom.', errors, { min: Number.MIN_VALUE })
+    if (rate !== undefined) bom.exchangeRate = rate
+  }
   return bom
+}
+
+/** 선택 통화 필드 (029): 'KRW' | 'USD' */
+function optCurrency(o: Record<string, unknown>, path: string, errors: Errors): { currency?: Currency } {
+  const c = o.currency
+  if (c === undefined) return {}
+  if (!CURRENCIES.includes(c as Currency)) {
+    errors.push("{path}: 'KRW' 또는 'USD'여야 합니다", { path: `${path}currency` })
+    return {}
+  }
+  return c === 'KRW' ? {} : { currency: c as Currency }
 }
 
 // ---------------------------------------------------------------- 도우미

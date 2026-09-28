@@ -4,6 +4,7 @@ import type { PartDef, PartInstance, Pin } from '@core/model'
 import { naturalCompare } from '@core/sort'
 import { useProjectStore } from '@/stores/projectStore'
 import { useUiStore } from '@/stores/uiStore'
+import { useSheets, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useT } from '@/i18n'
 import { connectionLabelsOf, setDirection } from './connectionLabels'
 
@@ -13,6 +14,23 @@ import { connectionLabelsOf, setDirection } from './connectionLabels'
  * 깃발을 누르면 그 전선을 골라 짝 깃발을 강조한다. 신호 방향은 여기와 결선표 표에서만 바꾼다(부품 정의는 그대로).
  * 부품(카드 사진·"연결 보기")을 누르면 간이 창: 왼쪽에 그 부품, 오른쪽에 이어진 부품들(하나씩 크게, 넘기기·목록).
  */
+/** 연결 라벨은 배선도 하나씩 (배선도끼리는 이어지지 않는다, 030). 고르면 그 배선도로 탭이 바뀐다 */
+function SheetSelect() {
+  const t = useT()
+  const sheets = useSheets()
+  const activeId = useWorkspaceStore((s) => s.activeId)
+  if (sheets.length < 2) return null
+  return (
+    <select className="sheet-select" aria-label={t('연결 라벨 배선도')} value={activeId} onChange={(e) => useWorkspaceStore.getState().switchTo(e.target.value)}>
+      {sheets.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export function ConnectionLabelsView() {
   const t = useT()
   const project = useProjectStore((s) => s.project)
@@ -37,6 +55,7 @@ export function ConnectionLabelsView() {
     <section className="report" aria-label={t('연결 라벨')}>
       <header className="report-header">
         <h2>{t('연결 라벨')}</h2>
+        <SheetSelect />
         <span className="report-summary">{t('전선 {n}개 · 부품 {m}개', { n: labels.length, m: cards.length })}</span>
         <div className="spacer" />
         {/* 빠른 접근: 부품을 고르면 바로 간이 창 */}

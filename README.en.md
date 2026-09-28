@@ -20,18 +20,22 @@
 
 </div>
 
-![Demo](images/demo-en.gif)
+<p align="center">
+  <img src="images/demo-en.gif" alt="Demo" />
+</p>
 
 > This project is **in its feature-testing stage**. Please leave [feedback](#feedback) — it will shape what comes next.
 
 ## Features
 
 - **Pins on photos**: click terminals on a part photo to add pins, draw guide lines to space pins evenly or snap them onto a line; attach datasheet PDFs
-- **Pin-to-pin wiring**: orthogonal routing, branches, crossing hops. Wires never run across parts
-- **Wire list and BOM, generated as you draw**: wire color (8 presets + RGB spectrum / typed values), gauge, length; unit prices, totals, purchase links
-- **Connection labels**: name tags like `Control board -> IMU : SDA` instead of lines show where and how each pin connects (Simulink Goto/From style). Signal directions are set per wire in the netlist; click a part to flip through the parts connected to it
+- **Pin-to-pin wiring**: orthogonal routing, branches, crossing hops, part alignment and grid snap, text-box notes, resize with corner handles. Wires never run across parts
+- **Wire list and BOM, generated as you draw**: wire color (8 presets + RGB spectrum / typed values), gauge, memo; unit prices, totals (KRW / USD with exchange-rate conversion), suppliers and purchase links
+- **Supplies**: register housings, terminals, heat-shrink and wire in the parts bin, match housings to connectors and pick them per wire; the BOM suggests quantities and asks whether to add them
+- **Multiple diagrams**: add and switch diagrams from the tabs at the bottom, pick which diagrams the BOM and netlist combine. Several diagrams save as one `.zip`
+- **Connection labels**: name tags like `Control board -> IMU : SDA` instead of lines show where and how each pin connects. Signal directions are set per wire in the netlist; click a part to flip through the parts connected to it
 - **Export**: PDF report, Excel / CSV, PNG
-- **Also**: collapsible side panels, autosave and recovery, parts bin sharing (`.opblib`), Korean / English, no limit on parts or wires
+- **Also**: find parts and signals (Ctrl+F, across diagrams), collapsible side panels, autosave and recovery, parts bin sharing (`.opblib`), Korean / English, no limit on parts or wires
 
 | Part editor | Wire specs |
 | --- | --- |
@@ -76,7 +80,7 @@ All shortcuts are listed under the **?** button in the app (`F1`).
 ## Feedback
 
 - Tell us what got in the way or what could be improved in an [issue](../../issues/new).
-- If you like it, a **⭐ star** helps a lot.
+- If you like it, a **⭐ star** helps a lot!!!!
 
 ## Roadmap
 

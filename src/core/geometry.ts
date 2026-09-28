@@ -74,3 +74,13 @@ export function instanceBounds(instance: PartInstance, part: PartDef): Rect {
   const ys = corners.map((c) => c.y + instance.y)
   return rectFromPoints({ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) })
 }
+
+// ---------------------------------------------------------------- 격자 맞춤 (033)
+
+export const GRID_SIZES = [10, 20, 50] as const
+export type GridSize = (typeof GRID_SIZES)[number]
+
+/** 점을 가장 가까운 격자점으로 */
+export function snapTo(p: Point, size: number): Point {
+  return { x: Math.round(p.x / size) * size + 0, y: Math.round(p.y / size) * size + 0 }
+}

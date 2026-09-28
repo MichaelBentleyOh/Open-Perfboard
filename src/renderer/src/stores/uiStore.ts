@@ -4,6 +4,7 @@ import type { WireTarget } from '@core/ops'
 import type { Point } from '@core/geometry'
 import type { ClipboardData } from '@core/clipboard'
 import type { ImportEntry } from '@core/library'
+import type { Supply } from '@core/model'
 import type { AttachmentData } from '@core/attachment'
 import { msg } from '@core/i18n'
 
@@ -12,11 +13,13 @@ export interface Selection {
   instances: string[]
   wires: string[]
   junctions: string[]
+  /** 글 상자 (032) */
+  notes: string[]
 }
 
-export const EMPTY_SELECTION: Selection = { instances: [], wires: [], junctions: [] }
+export const EMPTY_SELECTION: Selection = { instances: [], wires: [], junctions: [], notes: [] }
 
-export const selectionCount = (s: Selection) => s.instances.length + s.wires.length + s.junctions.length
+export const selectionCount = (s: Selection) => s.instances.length + s.wires.length + s.junctions.length + s.notes.length
 
 export const WIRE_COLORS = [
   { name: msg('빨강'), value: '#e53935' },
@@ -29,8 +32,9 @@ export const WIRE_COLORS = [
   { name: msg('흰색'), value: '#f5f5f5' }
 ] as const
 
-type Kind = 'instance' | 'wire' | 'junction'
-const listOf = (kind: Kind) => (kind === 'instance' ? 'instances' : kind === 'wire' ? 'wires' : 'junctions')
+type Kind = 'instance' | 'wire' | 'junction' | 'note'
+const LIST_OF = { instance: 'instances', wire: 'wires', junction: 'junctions', note: 'notes' } as const
+const listOf = (kind: Kind) => LIST_OF[kind]
 
 /** 부품 가져오기 대화상자에 보여 줄 내용 */
 export interface ImportRequest {
@@ -41,6 +45,8 @@ export interface ImportRequest {
   note?: string
   /** 파일에 들어 있던 첨부 본문. 가져온 부품이 쓰는 것만 저장한다 */
   attachmentData?: AttachmentData
+  /** 부속 부품 (027) */
+  supplyPlan?: ImportEntry<Supply>[]
 }
 
 /** 오래 걸리는 작업 (배선 정리): 진행 창을 띄우고 다른 조작을 막는다 */
@@ -99,6 +105,12 @@ interface UiState {
   /** 연결 라벨 보기에서 이 부품과 이어진 부품만 (null = 모두) */
   labelFocus: string | null
   setLabelFocus: (instanceId: string | null) => void
+  /** 글을 고치는 중인 글 상자 (032) */
+  editingNote: string | null
+  setEditingNote: (id: string | null) => void
+  /** 검색 창 (Ctrl+F, 032) */
+  searchOpen: boolean
+  setSearchOpen: (open: boolean) => void
   /** 단축키 도움말 (? 버튼, ? / F1 키) */
   helpOpen: boolean
   setHelpOpen: (open: boolean) => void
@@ -129,7 +141,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ pasteSerial: n })
     return n
   },
-  select: (selection) => set({ selection }),
+  select: (selection) => set({ selection: { ...EMPTY_SELECTION, ...selection } }),
   netlistMode: 'table',
   setNetlistMode: (netlistMode) => set({ netlistMode }),
   labelFocus: null,
@@ -154,6 +166,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   setWireColor: (wireColor) => set({ wireColor }),
   importRequest: null,
   setImportRequest: (importRequest) => set({ importRequest }),
+  editingNote: null,
+  setEditingNote: (editingNote) => set({ editingNote }),
+  searchOpen: false,
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
   helpOpen: false,
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   appVersion: null,

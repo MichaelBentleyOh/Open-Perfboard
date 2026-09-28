@@ -1,7 +1,7 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
 /** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 */
-export const PROJECT_FILE_VERSION = 6
+export const PROJECT_FILE_VERSION = 7
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -39,8 +39,12 @@ export interface PartDef {
   refPrefix?: string
   /** 구매 사이트 링크 (http/https) */
   purchaseUrl?: string
-  /** 기본 단가 (원). 배선도 BOM에서 따로 정하면 그 값이 우선 */
+  /** 조달처 (구매처 이름, 031) */
+  supplier?: string
+  /** 기본 단가. 배선도 BOM에서 따로 정하면 그 값이 우선 */
   unitPrice?: number
+  /** 단가의 통화 (029). 없으면 KRW. 배선도 사본은 배선도 통화로 바꿔 넣는다 */
+  currency?: Currency
   /** 첨부(데이터시트·핀아웃). 목록만, 본문은 라이브러리 첨부 폴더 (core/attachment.ts) */
   attachments?: Attachment[]
   image: PartImage
@@ -89,6 +93,20 @@ export interface Junction {
   label: string
 }
 
+/** 캔버스 글 상자 (메모, 032). x·y = 왼쪽 위 (월드 좌표) */
+export interface Note {
+  id: string
+  x: number
+  y: number
+  /** 너비 (월드 단위). 글이 길면 줄을 바꾼다 */
+  width: number
+  text: string
+  /** 글자 크기. 없으면 16 */
+  fontSize?: number
+  /** 글자 색 (#rrggbb). 없으면 기본 */
+  color?: string
+}
+
 export interface JunctionRef {
   junctionId: string
 }
@@ -109,10 +127,19 @@ export interface Wire {
   orthogonal?: boolean
   /** 전선 규격 (AWG, 10~30). width는 화면 표시용 굵기일 뿐 */
   awg?: number
-  /** 실제 전선 길이 (mm) */
-  length?: number
+  /** 메모 (027: 길이 칸 대신, 예전 길이는 "길이 120 mm"로 옮겨 온다) */
+  memo?: string
   /** 신호 방향 (025): forward = from → to, reverse = to → from, 없으면 양방향. 결선표에서만 바꾼다 */
   direction?: WireDirection
+  /** 전선 종류 (027, 부속 부품 kind = 'wire'의 id) */
+  supplyId?: string
+  /** 수축 튜브 (027): 양 끝에 1조각씩, 중간에 1조각. 값은 부속 부품(kind = 'tube') id */
+  tubes?: WireTubes
+}
+
+export interface WireTubes {
+  ends?: string
+  middle?: string
 }
 
 export type WireDirection = 'forward' | 'reverse'
@@ -131,16 +158,22 @@ export interface Project {
   wires: Wire[]
   /** 전선 접속점 (분기) */
   junctions?: Junction[]
+  /** 글 상자 (032) */
+  notes?: Note[]
   /** 타이틀 블록 정보 (PDF) */
   meta?: ProjectMeta
   /** BOM 편집 내용 (단가·비고 수정, 직접 추가한 항목) */
   bom?: ProjectBom
+  /** 쓰인 부속 부품 사본 (027): 전선 종류·수축 튜브, BOM에 넣은 하우징·단자. 파일 단독으로 열리게 */
+  supplies?: Record<string, Supply>
 }
 
 /** 배선도 부품 행의 수정값 */
 export interface BomOverride {
   unitPrice?: number
   memo?: string
+  /** 조달처 (031) */
+  supplier?: string
 }
 
 /** BOM에 직접 추가한 항목 (배선도에 없는 소모품 등) */
@@ -153,13 +186,66 @@ export interface BomItem {
   unitPrice?: number
   purchaseUrl?: string
   memo?: string
+  /** 조달처 (031) */
+  supplier?: string
 }
 
 export interface ProjectBom {
   /** 부품 정의 id → 수정값 */
   overrides?: Record<string, BomOverride>
   items?: BomItem[]
+  /** 부속 부품 id → BOM에 넣을지와 수정값 (027). 없으면 아직 묻는 중 */
+  supplies?: Record<string, SupplyChoice>
+  /** 이 배선도의 통화 (029). 없으면 KRW. 모든 단가가 이 통화다 */
+  currency?: Currency
+  /** 환율: 1 USD = ? KRW */
+  exchangeRate?: number
 }
+
+/** BOM에서 부속 부품을 넣을지 정한 값. quantity를 비우면 제안 수량을 따른다 */
+export interface SupplyChoice {
+  include: boolean
+  quantity?: number
+  unitPrice?: number
+  memo?: string
+  /** 조달처 (031) */
+  supplier?: string
+}
+
+export type SupplyKind = 'housing' | 'terminal' | 'tube' | 'wire'
+export const SUPPLY_KINDS: readonly SupplyKind[] = ['housing', 'terminal', 'tube', 'wire']
+
+/** 부속 부품 (027): 하우징·단자·수축 튜브·전선. 핀 없이 BOM용 정보만 */
+export interface Supply {
+  id: string
+  kind: SupplyKind
+  name: string
+  partNumber?: string
+  manufacturer?: string
+  purchaseUrl?: string
+  /** 조달처 (031) */
+  supplier?: string
+  /** 단가 (tube·wire는 묶음당) */
+  unitPrice?: number
+  currency?: Currency
+  memo?: string
+  image?: PartImage
+  /** housing: 짝이 되는 커넥터 종류 (부품 커넥터의 type과 같은 문자열, 예: "JST-XH 4P") */
+  connectorType?: string
+  /** housing: 쓰는 단자 (kind = 'terminal'의 id) */
+  terminalId?: string
+  /** tube: 지름 (mm) */
+  diameter?: number
+  /** tube·wire: 색 (#rrggbb) */
+  color?: string
+  /** wire: 규격 (AWG) */
+  awg?: number
+  /** tube·wire: 묶음 설명 (예: "1 m 롤", "100개입") */
+  pack?: string
+}
+
+export type Currency = 'KRW' | 'USD'
+export const CURRENCIES: readonly Currency[] = ['KRW', 'USD']
 
 export interface ProjectMeta {
   author?: string

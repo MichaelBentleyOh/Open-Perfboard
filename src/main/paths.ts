@@ -9,6 +9,9 @@ export function applyUserDataOverride(): void {
 
 export const libraryDir = (): string => join(app.getPath('userData'), 'library')
 
+/** 부속 부품 (027): 하우징·단자·수축 튜브·전선, <id>.json */
+export const suppliesDir = (): string => join(libraryDir(), 'supplies')
+
 /** 창 아이콘 (메인 창, 첨부 보기 창 공통) */
 export const appIconPath = (): string => join(app.getAppPath(), 'build/icon.png')
 

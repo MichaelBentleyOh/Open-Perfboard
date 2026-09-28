@@ -8,6 +8,8 @@ import { routeJob } from '@core/ops'
 import { useProjectStore } from '@/stores/projectStore'
 import { selectionCount, useUiStore } from '@/stores/uiStore'
 import { getCanvasPointer } from '@/features/canvas/canvasPointer'
+import { canvasZoom } from '@/features/canvas/canvasZoom'
+import { NOTE_DEFAULT_WIDTH } from '@core/note'
 import { RouteCancelled, runRouteJob } from '@/services/routeService'
 import { t } from '@/i18n'
 
@@ -25,7 +27,7 @@ function copyCurrent(): ClipboardData | null {
 
 function pasteWith(clip: ClipboardData, delta: Point): void {
   const r = useProjectStore.getState().paste(clip, delta, nanoid)
-  useUiStore.getState().select({ instances: r.instances, wires: r.wires, junctions: r.junctions })
+  useUiStore.getState().select({ instances: r.instances, wires: r.wires, junctions: r.junctions, notes: r.notes })
   notify(
     r.wires.length
       ? t('부품 {parts}개, 전선 {wires}개를 붙여넣었습니다', { parts: r.instances.length, wires: r.wires.length })
@@ -70,6 +72,17 @@ export function paste(): void {
   // 비켜 가는 거리는 "캔버스 밖에서 붙여넣은 횟수"만 센다
   const n = ui.nextPasteSerial()
   pasteWith(clip, { x: PASTE_STEP * n, y: PASTE_STEP * n })
+}
+
+/** 글 상자를 화면 가운데에 만들고 바로 글을 고친다 (032) */
+export function addTextBox(): void {
+  const c = canvasZoom()?.center() ?? { x: 0, y: 0 }
+  const id = nanoid()
+  useProjectStore.getState().addNote({ id, x: Math.round(c.x - NOTE_DEFAULT_WIDTH / 2), y: Math.round(c.y - 20), width: NOTE_DEFAULT_WIDTH, text: t('메모') })
+  const ui = useUiStore.getState()
+  ui.setTool('select')
+  ui.selectOne('note', id)
+  ui.setEditingNote(id)
 }
 
 /**

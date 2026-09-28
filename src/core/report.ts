@@ -1,8 +1,12 @@
 // PDF용 보고서 HTML. 순수 함수: 입력 → HTML 문자열.
 // main이 JavaScript를 끈 숨은 창에서 이 HTML을 PDF로 인쇄한다.
 // 사용자 입력(제목, 부품 이름, 비고 …)은 모두 이스케이프한다.
-import { BOM_COLUMNS, bomTotals, unpricedNote, type BomRow } from './bom'
+import { bomColumns, bomTotals, unpricedNote, type BomRow } from './bom'
+
+/** PDF 표는 # 열을 따로 그리므로 번호 칸은 뺀다 */
+const pdfBomColumns = (t: T) => bomColumns(t).filter((c) => c.header !== '번호')
 import { formatMoney } from './money'
+import type { Currency } from './model'
 import type { CsvColumn } from './csv'
 import { NETLIST_COLUMNS, type NetlistRow } from './netlist'
 import { isHttpUrl } from './url'
@@ -22,6 +26,8 @@ export interface ReportOptions {
   /** 배선도 이미지. data:image/png;base64 만 받는다 */
   diagramPng?: string
   bom?: BomRow[]
+  /** BOM 금액 통화 (029, 기본 원) */
+  currency?: Currency
   netlist?: NetlistRow[]
   counts: { parts: number; wires: number }
   /** 전선 색 이름 (#e53935 → 빨강) */
@@ -72,12 +78,12 @@ function table<R>(
 }
 
 /** BOM 합계 행: 수량 합, 전체 총액, 단가 미입력 안내 */
-function bomFooter(rows: BomRow[], tr: T): string {
+function bomFooter(rows: BomRow[], tr: T, currency: Currency): string {
   const t = bomTotals(rows)
-  const cells = BOM_COLUMNS.map((c) => {
-    if (c.header === '참조명') return `<td><b>${esc(tr('합계'))}</b></td>`
+  const cells = pdfBomColumns(tr).map((c) => {
+    if (c.header === '분류') return `<td><b>${esc(tr('합계'))}</b></td>`
     if (c.header === '수량') return `<td>${t.quantity}</td>`
-    if (c.header === '금액') return `<td class="money"><b>${esc(formatMoney(t.total, tr))}</b></td>`
+    if (c.header === '예상 총액') return `<td class="money"><b>${esc(formatMoney(t.total, tr, currency))}</b></td>`
     if (c.header === '비고') return `<td>${t.unpriced ? esc(unpricedNote(t.unpriced, tr)) : ''}</td>`
     return '<td></td>'
   })
@@ -117,11 +123,11 @@ export function buildReportHtml(o: ReportOptions): string {
     const link = (r: BomRow) =>
       r.purchaseUrl && isHttpUrl(r.purchaseUrl) ? `<a href="${esc(r.purchaseUrl)}">${esc(r.purchaseUrl)}</a>` : ''
     const money = (k: 'unitPrice' | 'amount') => (r: BomRow) =>
-      r[k] === undefined ? '' : `<span class="money">${esc(formatMoney(r[k]!, t))}</span>`
+      r[k] === undefined ? '' : `<span class="money">${esc(formatMoney(r[k]!, t, o.currency))}</span>`
     sections.push(`
     <section class="page">
       ${titleBlock('BOM')}
-      ${o.bom.length ? table(o.bom, BOM_COLUMNS, t, { '구매 링크': link, 단가: money('unitPrice'), 금액: money('amount') }, bomFooter(o.bom, t)) : `<p class="empty">${esc(t('배치된 부품이 없습니다.'))}</p>`}
+      ${o.bom.length ? table(o.bom, pdfBomColumns(t), t, { 구매사이트: link, '예상 단가': money('unitPrice'), '예상 총액': money('amount') }, bomFooter(o.bom, t, o.currency ?? 'KRW')) : `<p class="empty">${esc(t('배치된 부품이 없습니다.'))}</p>`}
     </section>`)
   }
 
