@@ -138,4 +138,4 @@ Copyright (C) 2026 Minsik Oh
 
 [GPL-3.0-or-later](LICENSE). 누구나 쓰고 고칠 수 있으며, 고친 것을 배포할 때는 소스 전체를 같은 라이선스로 공개하고 위 저작권 표시를 남겨야 합니다.
 
-> 본 프로젝트는 CLAUDE Code로 개발되었습니다.
+> 본 프로젝트는 CLAUDE Code를 이용해 개발되었습니다.
