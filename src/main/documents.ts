@@ -1,5 +1,6 @@
 // 문서 세션: 자동 저장 복구 사본, 최근 파일, 파일 연결(.opb 더블클릭)로 열기, 앱 설정 값.
 import { randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { grant, isGranted } from './grants'
 import { mt } from './locale'
@@ -19,9 +20,18 @@ function assertString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string') throw new Error(`${name}: 문자열이어야 합니다`)
 }
 
-/** 명령줄 인자 중 배선도 파일 (파일 연결로 실행하면 경로가 인자로 온다) */
+/**
+ * 명령줄 인자 중 배선도 파일 (파일 연결로 실행하면 경로가 인자로 온다).
+ * Linux 파일 관리자는 바탕화면 항목의 %U로 file:// 주소를 넘기기도 하므로 경로로 바꾼다
+ */
 export function projectArg(argv: readonly string[]): string | undefined {
-  return [...argv].reverse().find((a) => !a.startsWith('-') && [PROJECT_EXT, BUNDLE_EXT].some((ext) => a.toLowerCase().endsWith(ext)))
+  const arg = [...argv].reverse().find((a) => !a.startsWith('-') && [PROJECT_EXT, BUNDLE_EXT].some((ext) => a.toLowerCase().endsWith(ext)))
+  if (!arg?.startsWith('file://')) return arg
+  try {
+    return fileURLToPath(arg)
+  } catch {
+    return undefined
+  }
 }
 
 /** 사용자가 파일 연결·최근 파일로 연 경로: 권한을 주고 읽는다 */

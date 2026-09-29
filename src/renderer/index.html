@@ -7,9 +7,62 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: opb-attach:"
     />
     <title>Open Perfboard</title>
+    <!-- 로딩 화면 모양 (036). 번들보다 먼저 보여야 하므로 여기에 둔다. React의 SplashScreen도 이 클래스를 쓴다 -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #f4f5f7;
+      }
+      .splash {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        font-family: 'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans CJK KR', system-ui, sans-serif;
+        color: #1f2328;
+        user-select: none;
+      }
+      .splash-logo {
+        width: 160px;
+        height: 160px;
+      }
+      .splash-name {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 18px;
+      }
+      .splash-bar {
+        width: min(360px, 70vw);
+        height: 6px;
+        border-radius: 3px;
+        background: #dde0e5;
+        overflow: hidden;
+      }
+      .splash-fill {
+        height: 100%;
+        background: #15803d;
+        transition: width 0.15s ease-out;
+      }
+      .splash-step {
+        min-height: 1.4em;
+        font-size: 13px;
+        color: #6b7280;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="splash">
+        <img class="splash-logo" src="./src/assets/logo.svg" alt="" />
+        <div class="splash-name">Open Perfboard</div>
+        <div class="splash-bar"><div class="splash-fill" style="width: 10%"></div></div>
+        <div class="splash-step"></div>
+      </div>
+    </div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

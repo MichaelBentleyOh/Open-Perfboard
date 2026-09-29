@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { nanoid } from 'nanoid'
 import type { PartDef } from '@core/model'
 import {
@@ -29,10 +29,14 @@ interface Props {
   isNew: boolean
   onCancel: () => void
   onSave: (part: PartDef) => Promise<void>
+  /** modal: 배선도 부품함 창의 빠른 편집 · panel: 부품 작업실 안 (037a) */
+  variant?: 'modal' | 'panel'
+  /** 고친 게 있는지 (작업실이 다른 항목으로 바꿀 때 묻는 데 씀) */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-/** 부품 추가/편집 모달. 편집 내용은 저장 전까지 이 컴포넌트 안에만 있다 */
-export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
+/** 부품 추가/편집. 편집 내용은 저장 전까지 이 컴포넌트 안에만 있다 */
+export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange }: Props) {
   const t = useT()
   const [draft, setDraft] = useState<PartDraft>(initial)
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null)
@@ -106,6 +110,9 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedPinId, selectedGuideId])
 
+  const dirty = draft !== initial
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
+
   const set = <K extends keyof PartDraft>(key: K, value: PartDraft[K]) => setDraft((d) => ({ ...d, [key]: value }))
 
   const handleFile = async (file: File | undefined) => {
@@ -145,8 +152,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal part-editor" role="dialog" aria-label={t('부품 편집')}>
+    <EditorFrame variant={variant} className="part-editor" label={t('부품 편집')}>
         <header className="modal-header">
           <h2>{isNew ? t('새 부품 만들기') : t('부품 편집 — {name}', { name: initial.name })}</h2>
         </header>
@@ -512,13 +518,43 @@ export function PartEditor({ initial, isNew, onCancel, onSave }: Props) {
               </p>
             ))}
           </div>
-          <button onClick={onCancel} disabled={saving}>
-            {t('취소')}
+          <button onClick={onCancel} disabled={saving || (variant === 'panel' && !dirty && !isNew)}>
+            {variant === 'panel' ? t('되돌리기') : t('취소')}
           </button>
           <button className="primary" onClick={handleSave} disabled={saving || check.errors.length > 0}>
             {saving ? t('저장 중…') : t('저장')}
           </button>
         </footer>
+    </EditorFrame>
+  )
+}
+
+/** 모달이면 배경 + 대화상자, 작업실이면 화면 안 영역 */
+export function EditorFrame({
+  variant,
+  className,
+  label,
+  onEscape,
+  children
+}: {
+  variant: 'modal' | 'panel'
+  className: string
+  label: string
+  /** 모달에서 Esc = 취소 */
+  onEscape?: () => void
+  children: ReactNode
+}) {
+  if (variant === 'panel') {
+    return (
+      <section className={`studio-editor ${className}`} aria-label={label}>
+        {children}
+      </section>
+    )
+  }
+  return (
+    <div className="modal-backdrop">
+      <div className={`modal ${className}`} role="dialog" aria-label={label} onKeyDown={(e) => e.key === 'Escape' && onEscape?.()}>
+        {children}
       </div>
     </div>
   )

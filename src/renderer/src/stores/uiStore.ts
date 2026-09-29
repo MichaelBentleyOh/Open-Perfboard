@@ -61,6 +61,7 @@ export interface BusyTask {
 /** 선택 모드: 고르고 옮기기 · 배선 모드: 핀·전선·접속점에서 전선 잇기와 분기 */
 export type Tool = 'select' | 'wire'
 export type NetlistMode = 'table' | 'labels'
+export type Screen = 'splash' | 'home' | 'diagram' | 'studio'
 
 interface UiState {
   tool: Tool
@@ -117,6 +118,9 @@ interface UiState {
   /** 앱 버전 (도움말 창에 표시) */
   appVersion: string | null
   setAppVersion: (v: string) => void
+  /** 지금 보이는 화면: 로딩 → 홈 → 배선도 (036) / 부품 작업실 (037a) */
+  screen: Screen
+  setScreen: (screen: Screen) => void
   busy: BusyTask | null
   setBusy: (task: BusyTask | null) => void
   setBusyProgress: (done: number, total: number) => void
@@ -174,6 +178,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   appVersion: null,
   setAppVersion: (appVersion) => set({ appVersion }),
+  screen: 'splash',
+  setScreen: (screen) => set({ screen }),
   busy: null,
   setBusy: (busy) => set({ busy }),
   setBusyProgress: (done, total) => {

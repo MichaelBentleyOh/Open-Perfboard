@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,11 +14,41 @@ export function makeTempDir(prefix = 'opb-e2e-'): string {
 export const makeUserDataDir = () => makeTempDir()
 
 /**
+ * 프로세스를 자식(화면·GPU 프로세스)까지 강제 종료한다. 자식이 남으면 단일 인스턴스 잠금 때문에 다음 실행이 바로 끝난다.
+ * Linux는 먼저 자손을 모두 모은 뒤 죽인다 (부모가 먼저 죽으면 자식의 부모가 바뀌어 찾을 수 없다).
+ */
+export function killTree(pid: number): void {
+  if (process.platform === 'win32') {
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'])
+    return
+  }
+  const all: number[] = []
+  const walk = (p: number): void => {
+    all.push(p)
+    let out = ''
+    try {
+      out = execFileSync('pgrep', ['-P', String(p)], { encoding: 'utf8' })
+    } catch {
+      // 자식이 없으면 pgrep이 종료 코드 1을 낸다
+    }
+    for (const child of out.split(/\s+/).filter(Boolean)) walk(Number(child))
+  }
+  walk(pid)
+  for (const p of all) {
+    try {
+      process.kill(p, 'SIGKILL')
+    } catch {
+      // 이미 끝난 프로세스
+    }
+  }
+}
+
+/**
  * 빌드된 앱(out/)을 지정한 userData로 실행한다.
  * 닫기 확인은 기본으로 "저장 안 함", 렌더러의 confirm은 "확인"으로 자동 응답해 테스트가 멈추지 않게 한다.
  */
 /**
- * 앱 실행 명령. 보통은 빌드 결과(out/)를 electron으로, OPB_E2E_EXE가 있으면 설치 파일과 같은 포장된 앱(win-unpacked)으로
+ * 앱 실행 명령. 보통은 빌드 결과(out/)를 electron으로, OPB_E2E_EXE가 있으면 설치 파일과 같은 포장된 앱(win-unpacked / linux-unpacked)으로
  * (npm run test:packaged)
  */
 export function appCommand(args: string[] = []): { executablePath?: string; command: string; args: string[] } {
@@ -26,7 +57,11 @@ export function appCommand(args: string[] = []): { executablePath?: string; comm
   return { command: electronPath as unknown as string, args: ['.', ...args] }
 }
 
-export async function launchApp(userData: string, o: { args?: string[]; env?: Record<string, string> } = {}) {
+/**
+ * 앱을 띄우고 로딩 화면이 끝날 때까지 기다린다. 홈이 뜨면 "배선도 만들기"를 눌러 배선도 화면으로 들어간다 (036).
+ * home: true면 홈에 머문다. 홈 위에 대화상자(작업 복구 등)가 떠 있으면 누르지 않는다 → 테스트가 처리한 뒤 enterDiagram
+ */
+export async function launchApp(userData: string, o: { args?: string[]; env?: Record<string, string>; home?: boolean } = {}) {
   const { executablePath, args } = appCommand(o.args)
   const app = await electron.launch({ executablePath, args, env: { ...process.env, OPB_USER_DATA: userData, ...o.env } })
   await stubDialogs(app, { messageBox: 1 })
@@ -34,7 +69,15 @@ export async function launchApp(userData: string, o: { args?: string[]; env?: Re
   // confirm/alert는 위 stub(main의 showMessageBox)이 처리한다.
   // 리스너가 없으면 Playwright가 직접 닫으려다 실패하므로 빈 리스너를 둔다.
   win.on('dialog', () => {})
+  await win.locator('.home, .app').first().waitFor()
+  if (!o.home && (await win.locator('.home').count()) > 0 && (await win.getByRole('dialog').count()) === 0) await enterDiagram(win)
   return { app, win }
+}
+
+/** 홈에서 "배선도 만들기"를 눌러 배선도 화면으로 */
+export async function enterDiagram(win: Page): Promise<void> {
+  await win.getByRole('button', { name: /배선도 만들기|Make a Diagram/ }).click()
+  await win.locator('.app').waitFor()
 }
 
 /** main 프로세스의 네이티브 대화상자를 자동 응답으로 바꾼다 */

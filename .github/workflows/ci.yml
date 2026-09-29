@@ -1,0 +1,139 @@
+# 검사·E2E (Windows·Ubuntu), Linux 설치 파일(AppImage·deb·rpm) 만들기, Fedora에 rpm 설치해 E2E (계획 035)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  e2e:
+    name: e2e (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Linux 준비 (한글 글꼴, Electron 샌드박스)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk xvfb
+          # Ubuntu 23.10+ AppArmor가 Electron 샌드박스의 사용자 네임스페이스를 막는다
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: npm ci
+      - name: E2E (Linux, 가상 화면)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:e2e
+      - name: E2E (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: test-results/
+          retention-days: 7
+
+  dist-linux:
+    name: Linux 설치 파일
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: 준비 (rpm 도구, 한글 글꼴, Electron 샌드박스)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fonts-noto-cjk xvfb
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: npm ci
+      - name: AppImage·deb·rpm 만들기
+        run: |
+          npx electron-vite build
+          npx electron-builder --linux --publish never
+      - name: 포장된 앱(linux-unpacked)으로 E2E
+        run: xvfb-run -a npm run test:packaged -- --skip-dist
+      - name: deb 설치 확인
+        run: sudo apt-get install -y ./dist/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: packaged-results-linux
+          path: test-results/
+          retention-days: 7
+
+  fedora:
+    name: Fedora (rpm 설치 + E2E)
+    needs: dist-linux
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+      # Chromium 샌드박스가 컨테이너 안에서 네임스페이스를 만들 수 있게
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
+    steps:
+      - name: 준비 (가상 화면, 한글 글꼴, pgrep)
+        run: dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth which google-noto-sans-cjk-fonts procps-ng git tar
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: packages
+      - name: rpm 설치 (의존성까지 dnf가 확인)
+        run: dnf install -y ./packages/*.rpm
+      - run: npm ci
+      - name: 설치된 앱으로 E2E (root가 아닌 사용자로 실행)
+        run: |
+          useradd -m tester
+          chown -R tester "$GITHUB_WORKSPACE"
+          runuser -u tester -- env PATH="$PATH" OPB_E2E_EXE="/opt/Open Perfboard/open-perfboard" \
+            xvfb-run -a npx playwright test -c playwright.packaged.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fedora-results
+          path: test-results/
+          retention-days: 7

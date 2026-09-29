@@ -37,6 +37,8 @@ function confirmDiscard(): boolean {
 function load(doc: Pick<OpenedDocument, 'projects' | 'active' | 'scope'>, filePath: string | null): void {
   useWorkspaceStore.getState().load(doc.projects, doc.active, doc.scope)
   useDocumentStore.getState().markSaved(filePath)
+  // 어디서 열었든(홈·파일 메뉴·파일 연결) 연 배선도를 보여 준다 (036)
+  useUiStore.getState().setScreen('diagram')
 }
 
 /** 파일 내용(.opb 문자열 또는 .zip 바이트)을 읽는다 */
@@ -121,6 +123,7 @@ export async function openRecovered(id: string): Promise<boolean> {
     }
     useWorkspaceStore.getState().load(r.value.projects, r.value.active, r.value.scope)
     useDocumentStore.getState().markRecovered(meta.filePath)
+    useUiStore.getState().setScreen('diagram')
     return true
   } catch (e) {
     window.alert(`${t('복구 사본을 열 수 없습니다.')}\n${errorText(e)}`)

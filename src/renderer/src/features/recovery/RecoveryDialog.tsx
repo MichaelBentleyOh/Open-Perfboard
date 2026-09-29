@@ -1,25 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { formatBytes } from '@core/attachment'
 import { autosaveNow } from '@/app/autosave'
 import { openRecovered } from '@/app/fileCommands'
 import { useUiStore } from '@/stores/uiStore'
 import { useLocaleStore, useT } from '@/i18n'
 
-type Entry = Awaited<ReturnType<Window['api']['recovery']['list']>>[number]
+import type { RecoveryEntry as Entry } from '@/app/startup'
 
 /**
- * 시작할 때 지난 실행이 남긴 복구 사본(비정상 종료)이 있으면 보여 준다.
+ * 시작할 때 지난 실행이 남긴 복구 사본(비정상 종료)이 있으면 보여 준다. 목록은 시작 화면(036)이 읽어 넘긴다.
  * 복구하면 그 배선도가 "저장 안 됨" 상태로 열리고, 이번 실행의 사본으로 옮긴 뒤 옛 사본은 지운다.
  * 닫으면 사본은 그대로 남아 다음 실행에서 다시 묻는다.
  */
-export function RecoveryDialog() {
+export function RecoveryDialog({ initial }: { initial: Entry[] }) {
   const t = useT()
   const locale = useLocaleStore((s) => s.locale)
-  const [entries, setEntries] = useState<Entry[]>([])
-
-  useEffect(() => {
-    window.api.recovery.list().then(setEntries, () => setEntries([]))
-  }, [])
+  const [entries, setEntries] = useState<Entry[]>(initial)
 
   if (entries.length === 0) return null
   const close = () => setEntries([])

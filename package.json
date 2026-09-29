@@ -6,6 +6,10 @@
   "main": "./out/main/index.js",
   "private": true,
   "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "Minsik Oh",
+    "email": "michael1015999@gmail.com"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -19,8 +23,10 @@
     "perf:e2e": "electron-vite build && playwright test -c playwright.perf.config.ts",
     "build:icon": "electron scripts/build-icon.mjs",
     "dist:win": "electron-vite build && electron-builder --win",
-    "screenshots": "electron-vite build && playwright test -c playwright.readme.config.ts",
-    "test:packaged": "npm run dist:win && playwright test -c playwright.packaged.config.ts"
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "screenshots": "electron-vite build && playwright test -c playwright.readme.config.ts screenshots.spec",
+    "screenshots:gif": "electron-vite build && playwright test -c playwright.readme.config.ts demo.spec",
+    "test:packaged": "node scripts/test-packaged.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",

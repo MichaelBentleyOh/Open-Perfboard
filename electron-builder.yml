@@ -15,8 +15,11 @@ fileAssociations:
   - ext: opb
     name: Open Perfboard Project
     description: Open Perfboard 배선도
-# 향후 Linux 지원
+    mimeType: application/x-open-perfboard # Linux 파일 연결에 필요
 linux:
-  target: [AppImage, deb]
+  target: [AppImage, deb, rpm]
   category: Engineering
   icon: build/icons
+  executableName: open-perfboard # 공백 없는 실행 파일 이름 (Windows는 productName 그대로)
+  synopsis: Offline wire harness diagram editor
+  artifactName: ${name}-${version}-${arch}.${ext}

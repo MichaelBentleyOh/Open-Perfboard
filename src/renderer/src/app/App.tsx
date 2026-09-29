@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useStore } from 'zustand'
+import logoUrl from '@/assets/logo.svg'
 import { CanvasView } from '@/features/canvas/CanvasView'
 import { ZoomInput } from '@/features/canvas/ZoomInput'
 import { HelpDialog } from '@/features/help/HelpDialog'
 import { BusyOverlay } from '@/components/BusyOverlay'
-import { RecoveryDialog } from '@/features/recovery/RecoveryDialog'
 import { scopedSheets, useSheets, useWorkspaceStore } from '@/stores/workspaceStore'
 import type { Project } from '@core/model'
 import { SheetTabs } from '@/features/sheets/SheetTabs'
@@ -29,11 +29,9 @@ import {
   exportPng,
   newDocument,
   openDocument,
-  openFilePayload,
   openRecent,
   saveDocument
 } from './fileCommands'
-import { startAutosave } from './autosave'
 import { tidyWiring } from './editCommands'
 import { useCanvasShortcuts } from './shortcuts'
 
@@ -70,44 +68,7 @@ export default function App() {
   }
   useCanvasShortcuts({ onPdf: openPdf })
 
-  // 창 제목과 main의 닫기 확인에 변경 여부를 알린다
-  useEffect(() => {
-    document.title = `${dirty ? '* ' : ''}${name} — Open Perfboard`
-    window.api.app.setDirty(dirty)
-  }, [dirty, name])
-
-  // main의 대화상자(열기·저장·닫기 확인)도 같은 언어로
-  useEffect(() => {
-    document.documentElement.lang = locale
-    window.api.app.setLocale(locale)
-  }, [locale])
-
-  // 닫기 확인에서 "저장"을 고른 경우
-  useEffect(
-    () =>
-      window.api.app.onSaveAndClose(async () => {
-        if (await saveDocument()) window.api.app.closeNow()
-      }),
-    []
-  )
-
-  // 앱 버전, 자동 저장 시작, .opb 파일로 실행했으면 그 파일 열기
-  useEffect(() => {
-    let stop: (() => void) | undefined
-    let cancelled = false
-    window.api.app.config().then(({ version, autosaveMs }) => {
-      if (cancelled) return
-      useUiStore.getState().setAppVersion(version)
-      stop = startAutosave(autosaveMs)
-    })
-    window.api.app.takeOpenFile().then((file) => file && openFilePayload(file))
-    const off = window.api.app.onOpenFile((file) => void openFilePayload(file))
-    return () => {
-      cancelled = true
-      stop?.()
-      off()
-    }
-  }, [])
+  // 창 제목·닫기 확인·자동 저장·파일 연결은 화면과 상관없이 Root(036)가 맡는다
 
   // 최근 파일: 파일 메뉴를 열 때마다 새로 읽는다 (없어진 파일 표시)
   const [recent, setRecent] = useState<Awaited<ReturnType<Window['api']['recent']['list']>>>([])
@@ -137,7 +98,10 @@ export default function App() {
   return (
     <div className={['app', leftCollapsed && 'left-collapsed', rightCollapsed && 'right-collapsed'].filter(Boolean).join(' ')}>
       <header className="toolbar">
-        <span className="brand">Open Perfboard</span>
+        <button className="brand" onClick={() => useUiStore.getState().setScreen('home')} title={t('홈 화면으로')} aria-label={t('홈')}>
+          <img src={logoUrl} alt="" width={20} height={20} />
+          Open Perfboard
+        </button>
         <span className="doc-name" data-testid="doc-name">
           {name}
           {dirty && <span className="dirty-mark" title={t('저장하지 않은 변경 내용')}> *</span>}
@@ -367,7 +331,6 @@ export default function App() {
 
       <HelpDialog />
       <BusyOverlay />
-      <RecoveryDialog />
 
       {pdf && (
         <PdfDialog

@@ -125,6 +125,44 @@ export function registerIpc(): void {
     return saved
   })
 
+  // ---- 부품함 파일 (.opblib)을 문서처럼 열고 저장 (037a 부품 작업실)
+  ipcMain.handle('libfile:open', async (e) => {
+    const win = windowOf(e)
+    const opts = {
+      title: mt('부품함 파일 열기'),
+      filters: [
+        { name: mt('부품함, 부품, 배선도'), extensions: ['opblib', 'json', PROJECT_EXT.slice(1)] },
+        { name: mt('모든 파일'), extensions: ['*'] }
+      ],
+      properties: ['openFile' as const]
+    }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    if (r.canceled || !r.filePaths[0]) return null
+    const path = r.filePaths[0]
+    const content = await readProjectFile(path)
+    if (typeof content !== 'string') throw new Error(mt('부품함 파일이 아닙니다'))
+    // 다시 저장할 수 있는 것은 .opblib뿐 (.json·.opb는 다른 이름으로 저장)
+    if (path.toLowerCase().endsWith('.opblib')) grant(path)
+    return { path, content }
+  })
+
+  /** path가 null이거나 허락받지 않은 경로면 저장 대화상자. 저장된 경로, 취소하면 null */
+  ipcMain.handle('libfile:save', async (e, path: unknown, content: unknown, suggestedName: unknown) => {
+    assertString(content, 'content')
+    let target: string
+    if (typeof path === 'string' && isGranted(path)) target = path
+    else {
+      assertString(suggestedName, 'suggestedName')
+      const { ext, filter } = EXPORT_KINDS.opblib
+      const win = windowOf(e)
+      const opts = { title: mt('부품함 파일 저장'), defaultPath: `${safeFileName(suggestedName)}${ext}`, filters: [{ ...filter, name: mt(filter.name) }] }
+      const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
+      if (r.canceled || !r.filePath) return null
+      target = r.filePath
+    }
+    return grant(await writeExportFile(target, content, EXPORT_KINDS.opblib.ext))
+  })
+
   // ---- 내보내기
   ipcMain.handle('export:save', async (e, kind: unknown, suggestedName: unknown, data: unknown) => {
     if (typeof kind !== 'string' || !Object.hasOwn(EXPORT_KINDS, kind)) throw new Error('kind: csv, xlsx, png, opblib')

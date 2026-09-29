@@ -1,4 +1,4 @@
-// build/icon.svg, build/icon-small.svg → build/icon.png(512), build/icon.ico(16~256), build/icons/*.png, images/logo.png(README 로고)
+// build/icon.svg, build/icon-small.svg → build/icon.png(512), build/icon.ico(16~256), build/icons/*.png, images/logo.png(README 로고), src/renderer/src/assets/logo.svg(시작 화면 로고)
 // 실행: npm run build:icon  (Electron의 Chromium으로 SVG를 래스터화한다)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -69,6 +69,8 @@ app.whenReady().then(async () => {
   const icon512 = rendered.find((r) => r.size === 512).data
   writeFileSync(join(BUILD, 'icon.png'), icon512)
   writeFileSync(join(BUILD, '..', 'images', 'logo.png'), icon512)
+  // 시작 화면·툴바 로고 (036)
+  writeFileSync(join(BUILD, '..', 'src', 'renderer', 'src', 'assets', 'logo.svg'), readFileSync(join(BUILD, 'icon.svg')))
   writeFileSync(join(BUILD, 'icon.ico'), buildIco(rendered.filter((r) => ICO_SIZES.includes(r.size))))
   console.log('아이콘 생성 완료:', SIZES.join(', '))
   app.quit()

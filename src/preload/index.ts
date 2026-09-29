@@ -42,6 +42,13 @@ const api = {
     save: (path: string | null, content: ProjectContent, suggestedName: string): Promise<string | null> =>
       ipcRenderer.invoke('project:save', path, content, suggestedName)
   },
+  libfile: {
+    /** 부품함 파일(.opblib, .json 부품, .opb) 열기 대화상자 + 읽기. 취소하면 null (037a) */
+    open: (): Promise<{ path: string; content: string } | null> => ipcRenderer.invoke('libfile:open'),
+    /** .opblib 저장. path가 null(또는 열어서 허락받지 않은 경로)이면 저장 대화상자. 저장된 경로, 취소하면 null */
+    save: (path: string | null, content: string, suggestedName: string): Promise<string | null> =>
+      ipcRenderer.invoke('libfile:save', path, content, suggestedName)
+  },
   recent: {
     /** 최근 파일 (최근 것부터, 지금 있는지 포함) */
     list: (): Promise<RecentFile[]> => ipcRenderer.invoke('recent:list'),

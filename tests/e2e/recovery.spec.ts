@@ -1,8 +1,7 @@
-import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
-import { buildTwoPartDiagram, getProject, launchApp, makeTempDir, makeUserDataDir, nextFrame, seedLibrary, stubDialogs } from './launch'
+import { buildTwoPartDiagram, enterDiagram, getProject, killTree, launchApp, makeTempDir, makeUserDataDir, nextFrame, seedLibrary, stubDialogs } from './launch'
 
 /** 자동 저장 간격을 줄여서 실행 (기본 1분) */
 const FAST = { env: { OPB_AUTOSAVE_MS: '300' } }
@@ -14,7 +13,7 @@ const recoveryFiles = (userData: string) => {
 async function kill(app: ElectronApplication) {
   const proc = app.process()
   const exited = new Promise((r) => proc.once('exit', r))
-  execFileSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'])
+  killTree(proc.pid!)
   await exited
 }
 
@@ -94,6 +93,8 @@ test('새 배선도 복구 → 버리기', async () => {
     await dialog.getByRole('button', { name: '버리기' }).click()
     await expect(dialog).toHaveCount(0)
     expect(recoveryFiles(userData)).toEqual([])
+    // 버리면 홈에 남는다 → 배선도는 빈 새 배선도
+    await enterDiagram(win)
     expect((await getProject(win)).instances).toHaveLength(0)
   } finally {
     await app.close()

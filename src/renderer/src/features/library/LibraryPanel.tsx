@@ -11,7 +11,8 @@ import { PartEditor } from '@/features/part-editor/PartEditor'
 import { PART_DRAG_TYPE } from '@/features/canvas/CanvasView'
 import { planImport, readLibraryFile, serializeLibrary } from '@core/library'
 import { attachmentIdsOf, type AttachmentData } from '@core/attachment'
-import { collectAttachmentData, putAttachmentData } from '@/services/attachmentService'
+import { collectAttachmentData } from '@/services/attachmentService'
+import { applyImport } from '@/app/libraryCommands'
 import { useUiStore } from '@/stores/uiStore'
 import { ImportDialog } from './ImportDialog'
 import { useT } from '@/i18n'
@@ -20,7 +21,7 @@ const notify = (m: string) => useUiStore.getState().notify(m)
 
 export function LibraryPanel() {
   const t = useT()
-  const { parts, status, problems, load, save, saveMany, remove } = useLibraryStore()
+  const { parts, status, problems, load, save, remove } = useLibraryStore()
   const importing = useUiStore((s) => s.importRequest)
   const setImporting = useUiStore((s) => s.setImportRequest)
   const [query, setQuery] = useState('')
@@ -31,9 +32,10 @@ export function LibraryPanel() {
   const [kindFilter, setKindFilter] = useState<SupplyKind | 'all'>('all')
   const [editingSupply, setEditingSupply] = useState<{ draft: Supply; isNew: boolean } | null>(null)
 
+  // 보통은 시작 화면(036)이 이미 읽었다. 아직이면 여기서 읽는다
   useEffect(() => {
-    load()
-    useSupplyStore.getState().load()
+    if (useLibraryStore.getState().status === 'idle') load()
+    if (useSupplyStore.getState().status === 'idle') useSupplyStore.getState().load()
   }, [load])
 
   const filteredSupplies = useMemo(() => {
@@ -264,21 +266,7 @@ export function LibraryPanel() {
         <ImportDialog
           request={importing}
           onCancel={() => setImporting(null)}
-          onImport={async (toSave, suppliesToSave) => {
-            try {
-              await saveMany(toSave)
-              await useSupplyStore.getState().saveMany(suppliesToSave)
-              await putAttachmentData(importing.attachmentData, attachmentIdsOf(toSave))
-              notify(
-                suppliesToSave.length
-                  ? t('부품 {n}개, 부속 부품 {m}개를 가져왔습니다', { n: toSave.length, m: suppliesToSave.length })
-                  : t('부품 {n}개를 가져왔습니다', { n: toSave.length })
-              )
-            } catch (e) {
-              window.alert(`${t('가져오지 못했습니다.')}\n${(e as Error).message}`)
-            }
-            setImporting(null)
-          }}
+          onImport={(toSave, suppliesToSave) => applyImport(importing, toSave, suppliesToSave)}
         />
       )}
 

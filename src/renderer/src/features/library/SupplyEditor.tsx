@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { EditorFrame } from '@/features/part-editor/PartEditor'
 import { AWG_MAX, AWG_MIN, SUPPLY_KINDS, type Supply, type SupplyKind } from '@core/model'
 import { parseAmount } from '@core/money'
 import { SUPPLY_KIND_LABEL, checkSupply, finalizeSupply } from '@core/supply'
@@ -17,10 +18,13 @@ interface Props {
   isNew: boolean
   onCancel: () => void
   onSave: (s: Supply) => Promise<void>
+  /** modal: 배선도 부품함 창 · panel: 부품 작업실 안 (037a) */
+  variant?: 'modal' | 'panel'
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /** 부속 부품 편집 (027): 핀 없이 BOM용 정보만. 종류에 따라 칸이 달라진다 */
-export function SupplyEditor({ initial, isNew, onCancel, onSave }: Props) {
+export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange }: Props) {
   const t = useT()
   const [draft, setDraft] = useState<Supply>(initial)
   const [priceText, setPriceText] = useState(initial.unitPrice === undefined ? '' : initial.unitPrice.toLocaleString('ko-KR'))
@@ -32,6 +36,8 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave }: Props) {
   const supplies = useSupplyStore((s) => s.supplies)
   const errors = checkSupply(draft, t)
   const set = <K extends keyof Supply>(k: K, v: Supply[K]) => setDraft((d) => ({ ...d, [k]: v }))
+  const dirty = draft !== initial
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
 
   /** 부품함 부품의 커넥터 종류 (자동 완성) */
   const connectorTypes = useMemo(() => {
@@ -55,13 +61,8 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave }: Props) {
   }
 
   return (
-    <div className="modal-backdrop">
-      <div
-        className="modal supply-editor"
-        role="dialog"
-        aria-label={t('부속 부품 편집')}
-        onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-      >
+    <EditorFrame variant={variant} className="supply-editor" label={t('부속 부품 편집')} onEscape={onCancel}>
+
         <header className="modal-header">
           <h2>{isNew ? t('새 부속 부품') : t('부속 부품 편집 — {name}', { name: initial.name })}</h2>
         </header>
@@ -247,14 +248,13 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave }: Props) {
             ))}
             {message && <p className="error">{message}</p>}
           </div>
-          <button onClick={onCancel} disabled={saving}>
-            {t('취소')}
+          <button onClick={onCancel} disabled={saving || (variant === 'panel' && !dirty && !isNew)}>
+            {variant === 'panel' ? t('되돌리기') : t('취소')}
           </button>
           <button className="primary" disabled={saving || errors.length > 0} onClick={save}>
             {t('저장')}
           </button>
         </footer>
-      </div>
-    </div>
+    </EditorFrame>
   )
 }
