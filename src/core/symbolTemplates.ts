@@ -363,7 +363,7 @@ export const SYMBOL_TEMPLATES: readonly SymbolTemplate[] = [
     id: 'motor',
     group: 'power',
     name: msg('모터'),
-    build: fixed({ shapes: [circle(0, 0, 14), label(-14, -8, 28, 'M', 14)], slots: vertical2(30, 14), nameAt: 'right', ...small })
+    build: fixed({ shapes: [circle(0, 0, 14), label(-14, -8, 28, 'M', 14)], slots: vertical2(30, 14, M.plus, M.minus), nameAt: 'right', ...small })
   },
   {
     id: 'ground',
@@ -400,7 +400,9 @@ export function assignSlots(slots: readonly TemplateSlot[], pins: readonly Pin[]
   const used = new Set<string>()
   const out: (Pin | undefined)[] = slots.map((s) => {
     if (!s.match) return undefined
-    const p = pins.find((x) => !used.has(x.id) && s.match!.test((x.signal ?? '').trim()))
+    // 신호 이름이 맞는 핀 먼저, 없으면 번호가 맞는 핀 (배터리 단자 "+"·"-" 처럼 번호가 이름인 부품)
+    const fits = (text: string | undefined) => pins.find((x) => !used.has(x.id) && s.match!.test((text === 'signal' ? x.signal : x.number)?.trim() ?? ''))
+    const p = fits('signal') ?? fits('number')
     if (p) used.add(p.id)
     return p
   })

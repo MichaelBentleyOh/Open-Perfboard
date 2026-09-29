@@ -10,8 +10,14 @@ async function shootAll(lang: Lang) {
   mkdirSync(OUT, { recursive: true })
   const suffix = lang === 'en' ? '-en' : ''
   const ui = lang === 'en'
-    ? { netlist: /^Netlist \(/, diagram: /^Diagram$/, edit: 'Edit', cancel: 'Cancel', netlistView: 'Netlist view', labels: 'Connection labels', table: 'Table', collapseLeft: 'Collapse parts bin', expandLeft: 'Expand parts bin' }
-    : { netlist: /^결선표 \(/, diagram: /^배선도$/, edit: '편집', cancel: '취소', netlistView: '결선표 보기', labels: '연결 라벨', table: '표', collapseLeft: '부품함 접기', expandLeft: '부품함 펼치기' }
+    ? {
+        netlist: /^Netlist \(/, diagram: /^Diagram$/, edit: 'Edit', cancel: 'Cancel', netlistView: 'Netlist view', labels: 'Connection labels', table: 'Table', collapseLeft: 'Collapse parts bin', expandLeft: 'Expand parts bin',
+        views: 'View', schematic: 'Schematic', home: 'Home', makePart: /Make a Part/, partEdit: 'Edit part', draw: '✏ Drawing', symbol: '⎍ Symbol'
+      }
+    : {
+        netlist: /^결선표 \(/, diagram: /^배선도$/, edit: '편집', cancel: '취소', netlistView: '결선표 보기', labels: '연결 라벨', table: '표', collapseLeft: '부품함 접기', expandLeft: '부품함 펼치기',
+        views: '보기', schematic: '회로도', home: '홈', makePart: /부품 만들기/, partEdit: '부품 편집', draw: '✏ 그림', symbol: '⎍ 기호'
+      }
   const { app, win } = await openDemo(lang)
   try {
     // 1. 대표 화면: 전체 보기 + 제어 보드 선택(오른쪽에 스펙)
@@ -55,6 +61,27 @@ async function shootAll(lang: Lang) {
     await expect(win.getByRole('dialog')).toBeVisible()
     await shot(win, `part-editor${suffix}`)
     await win.getByRole('dialog').getByRole('button', { name: ui.cancel }).click()
+
+    // 6. 회로도 (039): 같은 부품·연결을 기호로
+    await win.getByRole('navigation', { name: ui.views }).getByRole('button', { name: ui.schematic, exact: true }).click()
+    await expect(win.getByTestId('schematic-canvas')).toBeVisible()
+    await win.keyboard.press('Home')
+    await shot(win, `schematic${suffix}`)
+    await win.getByRole('navigation', { name: ui.views }).getByRole('button', { name: ui.diagram }).click()
+
+    // 7. 홈 (036), 8. 부품 작업실 (037): 그림판·회로도 기호
+    await win.getByRole('button', { name: ui.home, exact: true }).click()
+    await expect(win.locator('.home')).toBeVisible()
+    // 최근 목록의 폴더는 이 PC의 임시 폴더(사용자 이름 포함) → 예시 경로로 보이게
+    await win.evaluate(() => document.querySelectorAll('.home-recent .menu-path').forEach((e) => (e.textContent = 'D:\\Projects\\Robot')))
+    await shot(win, `home${suffix}`)
+    await win.locator('.home').getByRole('button', { name: ui.makePart }).click()
+    await win.getByTestId('studio-part-list').getByText('MD-2A').first().click()
+    const editor = win.getByRole('region', { name: ui.partEdit })
+    await editor.getByRole('tab', { name: ui.draw }).click()
+    await shot(win, `studio${suffix}`)
+    await editor.getByRole('tab', { name: ui.symbol }).click()
+    await shot(win, `symbol${suffix}`)
   } finally {
     await app.close()
   }

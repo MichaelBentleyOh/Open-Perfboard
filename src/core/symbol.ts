@@ -137,8 +137,9 @@ export function autoSymbol(part: HasPins & { name: string }, makeId: () => strin
     ...top.map((p, i): SymbolPin => ({ pinId: p.id, side: 'top', x: centered(top.length, i), y: by - L })),
     ...bottom.map((p, i): SymbolPin => ({ pinId: p.id, side: 'bottom', x: centered(bottom.length, i), y: by + height + L }))
   ]
-  // 부품 이름은 몸통 아래 바깥 (몸통 안 핀 이름과 겹치지 않게, KiCad의 값 자리)
-  const nameY = by + height + (bottom.length ? L + 4 : 6)
+  // 부품 이름은 몸통 아래 바깥 (몸통 안 핀 이름과 겹치지 않게, KiCad의 값 자리).
+  // 아래 핀이 있으면 회로도의 세로 넷 라벨(GND 등)이 들어갈 만큼 더 아래
+  const nameY = by + height + (bottom.length ? L + 30 : 6)
   const shapes: Shape[] = [
     { id: makeId(), type: 'rect', x: bx, y: by, w: width, h: height, fill: '#ffffff', stroke: '#000000', strokeWidth: 2 },
     { id: makeId(), type: 'text', x: bx - 40, y: nameY, w: width + 80, text: part.name || '?', fontSize: 12, color: '#000000', bold: true, align: 'center' }

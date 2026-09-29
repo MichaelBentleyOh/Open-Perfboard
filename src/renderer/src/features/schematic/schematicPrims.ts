@@ -109,8 +109,10 @@ export function labelPrims(l: SchLabelItem, selected = false): Prim[] {
       ? { ...common, x: l.x - 4 - w, y: l.y - size / 2, align: 'right' }
       : l.side === 'right'
         ? { ...common, x: l.x + 4, y: l.y - size / 2, align: 'left' }
-        : // 위·아래 핀은 끝점 오른쪽 위에 가로 글 (세로 글은 핀 번호·부품 이름과 겹친다)
-          { ...common, x: l.x + 3, y: l.y - size - 3, align: 'left' }
+        : l.side === 'top'
+          ? // 위·아래 핀은 세로 글 (가로 글은 20 간격 핀끼리 겹친다). 기본 기호는 부품 이름을 그만큼 아래에 둔다
+            { ...common, x: l.x - size / 2, y: l.y - 4, rotation: -90, align: 'left' }
+          : { ...common, x: l.x - size / 2, y: l.y + 4 + w, rotation: -90, align: 'right' }
   return [
     { kind: 'circle', config: { x: l.x, y: l.y, radius: 1.8, fill, listening: false } },
     { kind: 'text', config: text }

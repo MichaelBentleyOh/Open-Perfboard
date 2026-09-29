@@ -444,6 +444,7 @@ export function buildSchematicScene(project: Project, layout: SchLayout = layout
     })
   }
   const bodyOf = new Map(symbols.map((s) => [s.instanceId, s.body]))
+  const pinEndsOf = new Map(symbols.map((s) => [s.instanceId, s.pins]))
   const labeledSet = new Set(project.schematic?.labeled ?? [])
   const names = labeledSet.size ? netNames(project) : new Map<string, string>()
   const wires: SchWireItem[] = []
@@ -462,10 +463,13 @@ export function buildSchematicScene(project: Project, layout: SchLayout = layout
       }
       continue
     }
-    // 양 끝 기호의 몸통만 피한다 (전체를 보면 부품 수의 제곱)
-    const avoid = [w.from, w.to].flatMap((e) => {
-      const s = 'instanceId' in e ? bodyOf.get(e.instanceId) : undefined
-      return s ? [s] : []
+    // 양 끝 기호의 몸통과 그 기호의 다른 핀 끝만 피한다 (전체를 보면 부품 수의 제곱).
+    // 핀 끝을 지나가면 합선처럼 보이고 KiCad에서는 실제로 이어진다
+    const own = new Set([`${a.x},${a.y}`, `${b.x},${b.y}`])
+    const avoid = [...new Set([w.from, w.to].flatMap((e) => ('instanceId' in e ? [e.instanceId] : [])))].flatMap((id) => {
+      const body = bodyOf.get(id)
+      const ends = (pinEndsOf.get(id) ?? []).filter((p) => !own.has(`${p.x},${p.y}`)).map((p) => ({ x: p.x - 1, y: p.y - 1, width: 2, height: 2 }))
+      return body ? [body, ...ends] : ends
     })
     wires.push({ wireId: w.id, points: schematicWirePath(a, b, avoid) })
     for (const e of [w.from, w.to]) if ('instanceId' in e) lineEnds.set(endKey(e), (lineEnds.get(endKey(e)) ?? 0) + 1)

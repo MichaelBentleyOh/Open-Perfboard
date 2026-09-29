@@ -2,7 +2,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import type { PartDef, Project, Supply, WireDirection } from '../../src/core/model'
+import type { PartDef, PartSymbol, Project, SchPlacement, Supply, SymbolSide, WireDirection } from '../../src/core/model'
+import { SYMBOL_TEMPLATES, applyTemplate } from '../../src/core/symbolTemplates'
 import { chooseSupply, setWireSupplies } from '../../src/core/supply'
 import { addInstance, connectEnds, emptyProject, routeWires, setMeta, updateInstance } from '../../src/core/ops'
 import { serializePart, serializeProject, serializeSupply } from '../../src/core/serialize'
@@ -101,8 +102,41 @@ const EN: Record<string, string> = {
   '예시 배선도 (README 스크린샷)': 'Example diagram (README screenshots)'
 }
 export const tr = (s: string, lang: Lang) => (lang === 'en' ? (EN[s] ?? s) : s)
+/** 회로도 기호 (038b): 배터리·모터는 기본 회로 기호 모음에서 */
+const SYMBOL_OF: Record<string, string> = { 'demo-battery': 'battery', 'demo-motor': 'motor' }
+/** 모터 드라이버는 직접 그린 기호: 전원 왼쪽, 모터 오른쪽, 제어 신호 아래 */
+function driverSymbol(name: string): PartSymbol {
+  const pin = (pinId: string, x: number, y: number, side: SymbolSide) => ({ pinId, x, y, side })
+  return {
+    drawing: {
+      width: 220,
+      height: 220,
+      shapes: [
+        { id: 'body', type: 'rect', x: 40, y: 40, w: 140, h: 140, fill: '#ffffff', stroke: '#000000', strokeWidth: 2 },
+        { id: 'name', type: 'text', x: 10, y: 18, w: 200, text: name, fontSize: 12, color: '#000000', bold: true, align: 'center' }
+      ]
+    },
+    pins: [
+      pin('vm', 20, 90, 'left'),
+      pin('g1', 20, 130, 'left'),
+      pin('mp', 200, 90, 'right'),
+      pin('mn', 200, 130, 'right'),
+      pin('in1', 70, 200, 'bottom'),
+      pin('in2', 90, 200, 'bottom'),
+      pin('en', 110, 200, 'bottom'),
+      pin('g2', 150, 200, 'bottom')
+    ]
+  }
+}
+function withSymbol(p: PartDef): PartDef {
+  if (p.id === 'demo-driver') return { ...p, symbol: driverSymbol(p.name) }
+  const tpl = SYMBOL_TEMPLATES.find((t) => t.id === SYMBOL_OF[p.id])
+  if (!tpl) return p
+  let k = 0
+  return { ...p, symbol: applyTemplate(tpl, p, () => `sym-${p.id}-${++k}`) }
+}
 const partsIn = (lang: Lang): PartDef[] =>
-  PARTS.map((p) => ({ ...p, name: tr(p.name, lang), connectors: p.connectors.map((c) => ({ ...c, type: tr(c.type, lang) })) }))
+  PARTS.map((p) => withSymbol({ ...p, name: tr(p.name, lang), connectors: p.connectors.map((c) => ({ ...c, type: tr(c.type, lang) })) }))
 
 /** 예시 부속 부품 (027): 하우징·단자·전선·수축 튜브 */
 const SUPPLIES: Supply[] = [
@@ -176,6 +210,17 @@ export function demoProject(lang: Lang, omit: string[] = []): Project {
   for (const id of ['demo-dupont-4', 'demo-dupont-8', 'demo-dupont-f', 'demo-xt60', 'demo-wire-18', 'demo-wire-20', 'demo-wire-26']) {
     p = chooseSupply(p, sup[id], true, library)
   }
+  // 회로도 (039): 기호 자리를 정하고 제어 보드 쪽 신호는 넷 라벨로
+  const at: Record<string, SchPlacement> = {
+    // 배터리·모터 핀 끝이 드라이버 핀과 같은 높이 → 곧은 선
+    bt: { x: 150, y: 180 },
+    drv: { x: 450, y: 180 },
+    mot: { x: 700, y: 190 },
+    mcu: { x: 450, y: 500 },
+    sen: { x: 780, y: 500 }
+  }
+  const labeled = p.wires.filter((w) => [w.from, w.to].some((e) => 'instanceId' in e && e.instanceId === 'mcu')).map((w) => w.id)
+  p = { ...p, schematic: { symbols: Object.fromEntries(Object.entries(at).filter(([id]) => !omit.includes(id))), labeled } }
   return setMeta(p, { author: 'Open Perfboard', notes: tr('예시 배선도 (README 스크린샷)', lang) })
 }
 
