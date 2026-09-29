@@ -34,6 +34,8 @@ test('부품 편집기 보조선: 긋기 → 핀 N개 고르게, 가까이 찍�
     await win.getByTestId('part-list').locator('.part-item').filter({ hasText: '테스트 MCU' }).getByRole('button', { name: '편집' }).click()
     const dialog = win.getByRole('dialog', { name: '부품 편집' })
     const canvas = dialog.getByTestId('pin-canvas')
+    // 사진을 다 읽은 뒤에 찍는다 (읽기 전에는 사진 도형이 없어 클릭이 핀이 되지 않는다)
+    await expect(canvas).toHaveAttribute('data-ready', 'true')
     await expect(canvas.locator('canvas').first()).toBeVisible()
     const photo = await photoMapper(canvas)
     const numbers = dialog.getByLabel('핀 번호')

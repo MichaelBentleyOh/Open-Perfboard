@@ -27,6 +27,8 @@ test('부품 작업실: 내 부품함에 부품·부속 부품 만들기 → 새
     const editor = win.getByRole('region', { name: '부품 편집' })
     await editor.getByTestId('photo-input').setInputFiles(PHOTO)
     const canvas = editor.getByTestId('pin-canvas')
+    // 사진을 다 읽은 뒤에 찍는다 (읽기 전에는 사진 도형이 없어 클릭이 핀이 되지 않는다)
+    await expect(canvas).toHaveAttribute('data-ready', 'true')
     await expect(canvas.locator('canvas').first()).toBeVisible()
     const box = (await canvas.boundingBox())!
     await win.mouse.click(box.x + box.width / 2, box.y + box.height / 2)

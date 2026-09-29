@@ -59,6 +59,8 @@ export function PinCanvas({
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [img, setImg] = useState<HTMLImageElement | null>(null)
+  /** 지금 사진(image.data)을 다 읽었는지. 읽기 전에는 사진 도형이 없어 클릭으로 핀을 찍을 수 없다 */
+  const [loadedData, setLoadedData] = useState<string | null>(null)
   /** 긋는 중인 보조선 (사진 기준 0~1) */
   const [drawing, setDrawing] = useState<{ a: Point; b: Point } | null>(null)
 
@@ -70,7 +72,11 @@ export function PinCanvas({
 
   useEffect(() => {
     let alive = true
-    loadHtmlImage(image.data).then((el) => alive && setImg(el))
+    loadHtmlImage(image.data).then((el) => {
+      if (!alive) return
+      setImg(el)
+      setLoadedData(image.data)
+    })
     return () => {
       alive = false
     }
@@ -121,7 +127,7 @@ export function PinCanvas({
   const cursor = (e: Konva.KonvaEventObject<MouseEvent>, c: string) => (e.target.getStage()!.container().style.cursor = c)
 
   return (
-    <div ref={containerRef} className="pin-canvas" data-testid="pin-canvas">
+    <div ref={containerRef} className="pin-canvas" data-testid="pin-canvas" data-ready={loadedData === image.data && size.width > 0}>
       {size.width > 0 && (
         <Stage width={size.width} height={size.height} onMouseDown={startGuide} onMouseMove={moveGuide} onMouseUp={endGuide} onMouseLeave={endGuide}>
           <Layer>

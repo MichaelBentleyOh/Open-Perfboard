@@ -80,6 +80,8 @@ test('회로도 기호: 기본 기호 → 핀 끌기(격자) → 전기 종류 �
     const table = editor.getByTestId('pin-table')
     await table.getByRole('row').filter({ has: win.locator('input[value="4"]') }).getByRole('button', { name: '핀 삭제' }).click()
     const canvas = editor.getByTestId('pin-canvas')
+    // 사진을 다 읽은 뒤에 찍는다 (읽기 전에는 사진 도형이 없어 클릭이 핀이 되지 않는다)
+    await expect(canvas).toHaveAttribute('data-ready', 'true')
     const box = (await canvas.boundingBox())!
     await win.mouse.click(box.x + box.width / 2, box.y + box.height * 0.3)
     await expect(table.getByLabel('핀 번호')).toHaveCount(4)

@@ -19,6 +19,8 @@ test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 �
 
     await dialog.getByTestId('photo-input').setInputFiles(PHOTO)
     const canvas = dialog.getByTestId('pin-canvas')
+    // 사진을 다 읽은 뒤에 찍는다 (읽기 전에는 사진 도형이 없어 클릭이 핀이 되지 않는다)
+    await expect(canvas).toHaveAttribute('data-ready', 'true')
     await expect(canvas.locator('canvas').first()).toBeVisible()
 
     // 사진 가운데 근처를 두 번 클릭 → 핀 1, 2 자동 번호

@@ -73,7 +73,9 @@ test('부품 그림판: 상자·원·선·글 그리기 → 색 → 실행 취�
     await editor.getByPlaceholder('제어 보드 CB-100').fill('그린 부품')
     await editor.getByRole('tab', { name: '● 핀' }).click()
     const canvas = editor.getByTestId('pin-canvas')
-    await expect(canvas.locator('canvas').first()).toBeVisible()
+    // 구운 사진을 다 읽은 뒤에 찍는다 (느린 PC·CI에서는 탭을 바꾼 직후엔 아직 사진 도형이 없다)
+    await expect(canvas).toHaveAttribute('data-ready', 'true')
+    await nextFrame(win)
     const box = (await canvas.boundingBox())!
     await win.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
     await expect(editor.getByLabel('핀 번호')).toHaveCount(1)
