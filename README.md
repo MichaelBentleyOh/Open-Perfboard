@@ -63,7 +63,7 @@ Download the file for your system from [Releases](../../releases/latest). It wor
 
 ### Windows 10 / 11 (64-bit)
 
-1. Download `Open Perfboard Setup <version>.exe`
+1. Download `Open.Perfboard.Setup.<version>.exe`
 2. Run it (no admin rights needed)
 
 > If Windows shows "Windows protected your PC", click **More info → Run anyway**.

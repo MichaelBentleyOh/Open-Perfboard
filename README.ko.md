@@ -63,7 +63,7 @@
 
 ### Windows 10 / 11 (64비트)
 
-1. `Open Perfboard Setup <버전>.exe` 내려받기
+1. `Open.Perfboard.Setup.<버전>.exe` 내려받기
 2. 실행 (관리자 권한 불필요)
 
 > "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누르세요.
