@@ -23,8 +23,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -39,8 +39,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -54,10 +54,20 @@ jobs:
       - run: npm ci
       - name: E2E (Linux, 가상 화면)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:e2e
+        run: set -o pipefail; xvfb-run -a npm run test:e2e 2>&1 | tee ci.log
       - name: E2E (Windows)
         if: runner.os == 'Windows'
-        run: npm run test:e2e
+        shell: bash
+        run: set -o pipefail; npm run test:e2e 2>&1 | tee ci.log
+      - name: 실패하면 마지막 출력을 주석으로 (로그인 없이 보이게)
+        if: failure()
+        shell: bash
+        run: |
+          # 실패한 단계의 마지막 60줄을 오류 주석 하나로 (Actions 로그는 로그인해야 보이지만 주석은 누구나 본다)
+          if [ -f ci.log ]; then
+            msg=$(tail -n 60 ci.log | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=${GITHUB_JOB} 실패 (마지막 출력)::$msg"
+          fi
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -69,8 +79,8 @@ jobs:
     name: Linux 설치 파일
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -82,12 +92,21 @@ jobs:
       - run: npm ci
       - name: AppImage·deb·rpm 만들기
         run: |
-          npx electron-vite build
-          npx electron-builder --linux --publish never
+          set -o pipefail
+          npx electron-vite build 2>&1 | tee ci.log
+          npx electron-builder --linux --publish never 2>&1 | tee ci.log
       - name: 포장된 앱(linux-unpacked)으로 E2E
-        run: xvfb-run -a npm run test:packaged -- --skip-dist
+        run: set -o pipefail; xvfb-run -a npm run test:packaged -- --skip-dist 2>&1 | tee ci.log
       - name: deb 설치 확인
-        run: sudo apt-get install -y ./dist/*.deb
+        run: set -o pipefail; sudo apt-get install -y ./dist/*.deb 2>&1 | tee ci.log
+      - name: 실패하면 마지막 출력을 주석으로 (로그인 없이 보이게)
+        if: failure()
+        run: |
+          # 실패한 단계의 마지막 60줄을 오류 주석 하나로 (Actions 로그는 로그인해야 보이지만 주석은 누구나 본다)
+          if [ -f ci.log ]; then
+            msg=$(tail -n 60 ci.log | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=${GITHUB_JOB} 실패 (마지막 출력)::$msg"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
@@ -114,8 +133,8 @@ jobs:
     steps:
       - name: 준비 (가상 화면, 한글 글꼴, pgrep)
         run: dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth which google-noto-sans-cjk-fonts procps-ng git tar
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
       - uses: actions/download-artifact@v4

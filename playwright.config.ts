@@ -6,6 +6,7 @@ export default defineConfig({
   testIgnore: 'perf.spec.ts', // 성능 측정은 npm run perf:e2e
   timeout: 30_000,
   workers: 1,
-  reporter: 'list',
+  // CI에서는 실패한 테스트를 GitHub 주석으로도 남긴다 (Actions 로그는 로그인해야 보이지만 주석은 누구나 본다)
+  reporter: process.env['CI'] ? [['list'], ['github']] : 'list',
   outputDir: 'test-results'
 })
