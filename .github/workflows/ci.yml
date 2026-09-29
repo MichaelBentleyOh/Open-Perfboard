@@ -128,8 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: fedora:latest
-      # Chromium 샌드박스가 컨테이너 안에서 네임스페이스를 만들 수 있게
-      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
+      # Chromium 샌드박스가 컨테이너 안에서 네임스페이스를 만들 수 있게. 공유 메모리는 Docker 기본(64MB)이면 그림을 그릴 때 화면 프로세스가 죽는다
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --shm-size=2g
     steps:
       - name: 준비 (가상 화면, 한글 글꼴, pgrep)
         run: dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth which google-noto-sans-cjk-fonts procps-ng git tar
