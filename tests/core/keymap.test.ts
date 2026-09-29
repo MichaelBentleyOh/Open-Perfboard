@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SHORTCUTS, formatCombo, matchCombo, type Combo } from '@core/keymap'
+import { SHORTCUTS, STUDIO_SHORTCUTS, formatCombo, matchCombo, type Combo } from '@core/keymap'
 
 const key = (k: string, o: { ctrl?: boolean; shift?: boolean; alt?: boolean; code?: string } = {}) => ({
   key: k,
@@ -60,6 +60,18 @@ describe('단축키 목록', () => {
     expect(find(key('r', { shift: true }))).toEqual(['rotateBack'])
     expect(find(key('v', { alt: true }))).toEqual([])
     expect(find(key('+', { code: 'NumpadAdd' }))).toEqual(['zoomIn'])
+  })
+
+  it('작업실 그림판 단축키: 같은 조합은 한 곳에서만, 도구 키 V·R·O·L·T (037b)', () => {
+    const m = new Map<string, string[]>()
+    for (const s of STUDIO_SHORTCUTS) for (const c of s.combos) m.set(formatCombo(c), [...(m.get(formatCombo(c)) ?? []), s.id])
+    expect([...m].filter(([, ids]) => ids.length > 1)).toEqual([])
+    const findS = (e: ReturnType<typeof key>) => STUDIO_SHORTCUTS.filter((s) => s.combos.some((c) => matchCombo(e, c))).map((s) => s.id)
+    expect(['v', 'r', 'o', 'l', 't'].map((k) => findS(key(k))[0])).toEqual(['toolSelect', 'toolRect', 'toolEllipse', 'toolLine', 'toolText'])
+    expect(findS(key('d', { ctrl: true }))).toEqual(['duplicate'])
+    expect(findS(key(']', { ctrl: true }))).toEqual(['forward'])
+    expect(findS(key('}', { ctrl: true, shift: true }))).toEqual(['front'])
+    expect(findS(key('ArrowLeft', { shift: true }))).toEqual(['nudgeLeft'])
   })
 
   it('표시용 이름', () => {

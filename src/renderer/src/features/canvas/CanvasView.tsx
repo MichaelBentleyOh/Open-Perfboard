@@ -16,7 +16,8 @@ import { selectionCount, useUiStore } from '@/stores/uiStore'
 import { useLibraryStore } from '@/stores/libraryStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { loadHtmlImage } from '@/features/part-editor/image'
-import { connectorColor } from '@/features/part-editor/PinCanvas'
+import { connectorColor } from '@/features/part-editor/connectorColor'
+import { PART_DRAG_TYPE } from './dragTypes'
 import { registerCanvasExporter } from './canvasExport'
 import { registerCanvasPointer } from './canvasPointer'
 import { registerCanvasZoom } from './canvasZoom'
@@ -36,9 +37,6 @@ const CULL_MARGIN = 60
 const DETAIL_SCALE = 0.3
 /** 이 배율보다 작으면 부품 그림자를 그리지 않는다 (그림자는 그리기가 비싸다) */
 const SHADOW_SCALE = 0.5
-/** 라이브러리 → 캔버스 드래그 데이터 형식 */
-export const PART_DRAG_TYPE = 'application/x-opb-part'
-
 const NO_HOPS: Hop[] = []
 const NO_IDS: ReadonlySet<string> = new Set()
 

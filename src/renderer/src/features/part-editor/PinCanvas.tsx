@@ -4,23 +4,16 @@ import type Konva from 'konva'
 import type { Connector, PartImage, Pin } from '@core/model'
 import { snapToGuides, straighten, type Guide, type Point } from '@core/guide'
 import { loadHtmlImage } from './image'
+import { connectorColor } from './connectorColor'
 
 const PADDING = 24
 const PIN_R = 9
 /** 보조선에 붙는 거리 (화면 px) */
-export const SNAP_PX = 10
+const SNAP_PX = 10
 /** 수평·수직에서 이 각도 안이면 보조선을 곧게 맞춘다 (Shift = 자유 각도) */
 const STRAIGHTEN_DEG = 8
-/** 커넥터별 핀 색상 (커넥터 없음은 회색) */
-const CONNECTOR_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00897b']
-export const NO_CONNECTOR_COLOR = '#616161'
 const GUIDE_COLOR = '#0ea5e9'
 const GUIDE_SELECTED = '#0369a1'
-
-export function connectorColor(connectors: readonly Connector[], connectorId?: string): string {
-  const i = connectors.findIndex((c) => c.id === connectorId)
-  return i < 0 ? NO_CONNECTOR_COLOR : CONNECTOR_COLORS[i % CONNECTOR_COLORS.length]
-}
 
 /** 핀 찍기(기본) / 보조선 긋기 */
 export type PinTool = 'pin' | 'guide'

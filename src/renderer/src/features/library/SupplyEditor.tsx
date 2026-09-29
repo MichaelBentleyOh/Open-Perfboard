@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EditorFrame } from '@/features/part-editor/PartEditor'
+import { drawingFromImage, emptyDrawing } from '@core/drawing'
+import { DrawingPanel } from '@/features/studio/drawing/DrawingPanel'
+import { bakeDrawing, SUPPLY_BAKE_MAX } from '@/features/studio/drawing/bake'
 import { AWG_MAX, AWG_MIN, SUPPLY_KINDS, type Supply, type SupplyKind } from '@core/model'
 import { parseAmount } from '@core/money'
 import { SUPPLY_KIND_LABEL, checkSupply, finalizeSupply } from '@core/supply'
@@ -37,6 +40,12 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'moda
   const errors = checkSupply(draft, t)
   const set = <K extends keyof Supply>(k: K, v: Supply[K]) => setDraft((d) => ({ ...d, [k]: v }))
   const dirty = draft !== initial
+  // 그림 (037b, 작업실에서만): 저장할 때 PNG로 굽는다
+  const stale = useRef(false)
+  const drawingNow = useMemo(
+    () => draft.drawing ?? (draft.image ? drawingFromImage(draft.image.data, draft.image.width, draft.image.height, 'photo') : emptyDrawing(240, 240)),
+    [draft.drawing, draft.image]
+  )
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
 
   /** 부품함 부품의 커넥터 종류 (자동 완성) */
@@ -53,7 +62,12 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'moda
     if (errors.length > 0) return
     setSaving(true)
     try {
-      await onSave(finalizeSupply(draft))
+      let d = draft
+      if (stale.current && d.drawing) {
+        // 아무것도 안 그렸으면 그림도 사진도 없음
+        d = d.drawing.shapes.length ? { ...d, image: await bakeDrawing(d.drawing, SUPPLY_BAKE_MAX) } : { ...d, image: undefined, drawing: undefined }
+      }
+      await onSave(finalizeSupply(d))
     } catch (e) {
       setMessage(t('저장하지 못했습니다: {detail}', { detail: (e as Error).message }))
       setSaving(false)
@@ -67,11 +81,24 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'moda
           <h2>{isNew ? t('새 부속 부품') : t('부속 부품 편집 — {name}', { name: initial.name })}</h2>
         </header>
         <div className="supply-editor-body">
+          {variant === 'panel' ? (
+            <div className="supply-drawing">
+              <DrawingPanel
+                drawing={drawingNow}
+                pins={[]}
+                maxImageSide={SUPPLY_IMAGE_SIDE * 2}
+                onChange={(drawing) => {
+                  stale.current = true
+                  setDraft((x) => ({ ...x, drawing }))
+                }}
+              />
+            </div>
+          ) : (
           <div className="supply-photo">
             {draft.image ? <img src={draft.image.data} alt="" /> : <div className="supply-photo-empty">{t('사진 없음')}</div>}
             <div className="button-row">
               <button onClick={() => fileRef.current?.click()}>{draft.image ? t('사진 바꾸기') : t('사진 불러오기')}</button>
-              {draft.image && <button onClick={() => set('image', undefined)}>{t('사진 빼기')}</button>}
+              {draft.image && <button onClick={() => setDraft((x) => ({ ...x, image: undefined, drawing: undefined }))}>{t('사진 빼기')}</button>}
             </div>
             <input
               ref={fileRef}
@@ -83,13 +110,15 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'moda
                 e.target.value = ''
                 if (!file) return
                 try {
-                  set('image', await readImageFile(file, SUPPLY_IMAGE_SIDE))
+                  const image = await readImageFile(file, SUPPLY_IMAGE_SIDE)
+                  setDraft((x) => ({ ...x, image, drawing: undefined }))
                 } catch (err) {
                   setMessage((err as Error).message)
                 }
               }}
             />
           </div>
+          )}
           <div className="supply-fields">
             <label className="field">
               <span>{t('종류')}</span>

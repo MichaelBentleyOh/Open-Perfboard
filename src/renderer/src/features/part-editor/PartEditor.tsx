@@ -20,8 +20,12 @@ import { readImageFile } from './image'
 import { addAttachments, removeAttachment, renameAttachment } from '@core/attachment'
 import { AttachmentList } from '@/features/attachments/AttachmentList'
 import { useAttachmentRevision } from '@/services/attachmentService'
-import { PinCanvas, connectorColor, type PinTool } from './PinCanvas'
+import { PinCanvas, type PinTool } from './PinCanvas'
+import { connectorColor } from './connectorColor'
 import { evenPoints, pinsOnGuide, respacePins, type Guide, type Point } from '@core/guide'
+import { drawingFromImage, emptyDrawing } from '@core/drawing'
+import { DrawingPanel } from '@/features/studio/drawing/DrawingPanel'
+import { bakeDrawing, PART_BAKE_MAX } from '@/features/studio/drawing/bake'
 import { useT } from '@/i18n'
 
 interface Props {
@@ -64,6 +68,41 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   const onGuideTolerance = Math.max(imageScale.x, imageScale.y) * 0.005
   const count = Math.min(200, Math.max(1, Math.floor(Number(evenCount)) || 1))
 
+  // 그림 (037b, 작업실에서만): 그림 탭에서 그리고, 핀 탭으로 갈 때·저장할 때 PNG로 굽는다
+  const [view, setView] = useState<'draw' | 'pins'>(variant === 'panel' && (isNew || initial.drawing) ? 'draw' : 'pins')
+  /** 그림을 고쳤는데 아직 사진으로 굽지 않았다 */
+  const stale = useRef(false)
+  const [baking, setBaking] = useState(false)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  /** 그림판에 보일 그림: 원본이 없으면 지금 사진 한 장(또는 빈 그림판)에서 시작 (고치기 전까지는 draft를 바꾸지 않는다) */
+  const drawingNow = useMemo(
+    () => draft.drawing ?? (draft.image ? drawingFromImage(draft.image.data, draft.image.width, draft.image.height, 'photo') : emptyDrawing()),
+    [draft.drawing, draft.image]
+  )
+  /** 고친 그림을 사진으로 굽는다. 구운 draft를 돌려준다 */
+  const bake = async (d: PartDraft): Promise<PartDraft> => {
+    if (!stale.current || !d.drawing) return d
+    setBaking(true)
+    try {
+      const image = await bakeDrawing(d.drawing, PART_BAKE_MAX)
+      stale.current = false
+      const next = { ...draftRef.current, image }
+      setDraft(next)
+      return next
+    } finally {
+      setBaking(false)
+    }
+  }
+  const showPins = async () => {
+    try {
+      await bake(draftRef.current)
+      setView('pins')
+    } catch (e) {
+      setMessage((e as Error).message)
+    }
+  }
+
   const selectPin = (id: string | null) => {
     setSelectedPinId(id)
     if (id) setSelectedGuideId(null)
@@ -95,6 +134,8 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      // 그림 탭의 키는 그림판이 처리한다
+      if (view === 'draw') return
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPinId) {
         setDraft((d) => removePin(d, selectedPinId))
         setSelectedPinId(null)
@@ -108,7 +149,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedPinId, selectedGuideId])
+  }, [selectedPinId, selectedGuideId, view])
 
   const dirty = draft !== initial
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
@@ -118,8 +159,13 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   const handleFile = async (file: File | undefined) => {
     if (!file) return
     try {
+      if (draft.drawing && draft.drawing.shapes.length > 1 && !window.confirm(t('그린 그림을 이 사진 한 장으로 바꿀까요?'))) return
       const image = await readImageFile(file)
-      setDraft((d) => ({ ...d, image }))
+      // 사진을 바꾸면 그림 원본은 그 사진 한 장이 된다 (배선도 빠른 편집에서는 원본을 뺀다)
+      setDraft((d) => ({ ...d, image, drawing: variant === 'panel' ? drawingFromImage(image.data, image.width, image.height, 'photo') : undefined }))
+      stale.current = false
+      // 사진을 불러왔으면 바로 핀을 찍을 수 있게
+      setView('pins')
       setMessage(null)
     } catch (e) {
       setMessage((e as Error).message)
@@ -140,10 +186,13 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   }
 
   const handleSave = async () => {
-    const part = finalizeDraft(draft)
-    if (!part) return
     setSaving(true)
     try {
+      const part = finalizeDraft(await bake(draft))
+      if (!part) {
+        setSaving(false)
+        return
+      }
       await onSave(part)
     } catch (e) {
       setMessage(t('저장하지 못했습니다: {detail}', { detail: (e as Error).message }))
@@ -159,6 +208,27 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
 
         <div className="part-editor-body">
           <section className="photo-area">
+            {variant === 'panel' && (
+              <div className="segmented editor-view-tabs" role="tablist" aria-label={t('편집 화면')}>
+                <button role="tab" aria-selected={view === 'draw'} className={view === 'draw' ? 'active' : ''} onClick={() => setView('draw')}>
+                  {t('✏ 그림')}
+                </button>
+                <button role="tab" aria-selected={view === 'pins'} className={view === 'pins' ? 'active' : ''} onClick={showPins} disabled={baking}>
+                  {baking ? t('사진 만드는 중…') : t('● 핀')}
+                </button>
+              </div>
+            )}
+            {variant === 'panel' && view === 'draw' ? (
+              <DrawingPanel
+                drawing={drawingNow}
+                pins={draft.pins}
+                onChange={(drawing, pins) => {
+                  stale.current = true
+                  setDraft((d) => ({ ...d, drawing, ...(pins ? { pins } : {}) }))
+                }}
+              />
+            ) : (
+            <>
             {draft.image && (
               <div className="pin-tools">
                 <div className="segmented" role="group" aria-label={t('도구')}>
@@ -247,7 +317,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
               />
             ) : (
               <div className="photo-empty">
-                <p>{t('부품 사진을 불러오세요.')}</p>
+                <p>{variant === 'panel' ? t('부품 사진을 불러오거나 그림 탭에서 그리세요.') : t('부품 사진을 불러오세요.')}</p>
                 <button onClick={() => fileRef.current?.click()}>{t('사진 불러오기')}</button>
               </div>
             )}
@@ -256,6 +326,8 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                 ? t('사진을 클릭하면 핀이 추가됩니다 · 핀은 드래그로 이동 · 선택 후 Delete로 삭제 · 보조선 가까이 찍으면 선 위에 붙습니다')
                 : t('사진 위를 끌어 보조선을 긋습니다 (수평·수직에 가까우면 곧게, Shift = 자유 각도) · 선을 눌러 고르고 끝점 손잡이로 조절 · Delete로 삭제')}
             </p>
+            </>
+            )}
           </section>
 
           <section className="form-area">

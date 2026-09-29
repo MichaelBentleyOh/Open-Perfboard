@@ -12,8 +12,8 @@ export const LIBRARY_VERSION = 1
 export const SAFE_PART_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 /**
- * 라이브러리 묶음 파일. attachmentData = 첨부 본문, supplies = 부속 부품 (027).
- * 둘 다 덧붙이는 칸이라 예전 버전 앱은 무시하고 부품만 가져간다 (파일 버전 그대로)
+ * 라이브러리 묶음 파일. attachmentData = 첨부 본문, supplies = 부속 부품 (027), 부품·부속 부품의 drawing = 그림 원본 (037b).
+ * 모두 덧붙이는 칸이라 예전 버전 앱은 무시하고 부품(구운 사진)만 가져간다 (파일 버전 그대로)
  */
 export function serializeLibrary(parts: readonly PartDef[], attachmentData: AttachmentData = {}, supplies: readonly Supply[] = []): string {
   const data = Object.keys(attachmentData).length > 0 ? { attachmentData } : {}

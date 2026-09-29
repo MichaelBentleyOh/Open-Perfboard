@@ -282,6 +282,7 @@ export function finalizeSupply(s: Supply): Supply {
   if (s.unitPrice !== undefined) out.unitPrice = s.unitPrice
   if (s.currency && s.currency !== 'KRW') out.currency = s.currency
   if (s.image) out.image = s.image
+  if (s.drawing) out.drawing = s.drawing
   if (s.diameter !== undefined) out.diameter = s.diameter
   if (s.awg !== undefined) out.awg = s.awg
   const only: Record<SupplyKind, readonly (keyof Supply)[]> = {

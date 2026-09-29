@@ -28,8 +28,12 @@ import {
   type Supply,
   type SupplyChoice,
   type SupplyKind,
-  type WireTubes
+  type WireTubes,
+  type Drawing,
+  type Shape,
+  type TextAlign
 } from './model'
+import { DRAWING_MAX, DRAWING_MIN, SHAPES_MAX } from './drawing'
 import { isHttpUrl } from './url'
 import { ATTACHMENT_ID, isAttachmentType, type AttachmentData } from './attachment'
 import { ko, type Params, type T } from './i18n'
@@ -174,7 +178,9 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v5 → v6: 전선 신호 방향(direction)이 생김. 없는 전선은 양방향
   5: (raw) => ({ ...raw, version: 6 }),
   // v7: 전선 길이(mm) 칸을 없애고 메모로 옮긴다 (027), BOM 통화·환율 (029)
-  6: migrateWireLength
+  6: migrateWireLength,
+  // v7 → v8: 부품·부속 부품 그림 원본(drawing, 037b)이 생김. 없는 파일은 그대로
+  7: (raw) => ({ ...raw, version: 8 })
 }
 
 /** v6 → v7: 전선 길이(length, mm)를 메모 뒤에 "L=250 mm"로 옮긴다 (값을 잃지 않게) */
@@ -326,6 +332,7 @@ function readSupply(v: unknown, path: string, errors: Errors): Supply | undefine
     errors.push('{path}: http:// 또는 https:// 주소여야 합니다', { path: `${path}purchaseUrl` })
   }
   const image = v.image === undefined ? undefined : readImage(v.image, `${path}image.`, errors)
+  const drawing = v.drawing === undefined ? undefined : readDrawing(v.drawing, `${path}drawing.`, errors)
   const diameter = v.diameter === undefined ? undefined : num(v, 'diameter', path, errors, { min: Number.MIN_VALUE })
   const awg = v.awg === undefined ? undefined : num(v, 'awg', path, errors, { min: AWG_MIN, max: AWG_MAX })
   if (awg !== undefined && !Number.isInteger(awg)) errors.push('{path}: 정수여야 합니다', { path: `${path}awg` })
@@ -342,6 +349,7 @@ function readSupply(v: unknown, path: string, errors: Errors): Supply | undefine
     ...optCurrency(v, path, errors),
     ...optStr(v, 'memo', path, errors),
     ...(image ? { image } : {}),
+    ...(drawing ? { drawing } : {}),
     ...optStr(v, 'connectorType', path, errors),
     ...optStr(v, 'terminalId', path, errors),
     ...(diameter !== undefined ? { diameter } : {}),
@@ -378,6 +386,7 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
   if (purchase.purchaseUrl !== undefined && !isHttpUrl(purchase.purchaseUrl)) {
     errors.push('{path}: http:// 또는 https:// 주소여야 합니다', { path: `${path}purchaseUrl` })
   }
+  const drawing = v.drawing === undefined ? undefined : readDrawing(v.drawing, `${path}drawing.`, errors)
   if (id === undefined || name === undefined || !image) return undefined
   return {
     id,
@@ -392,8 +401,112 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
     ...optCurrency(v, path, errors),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
     image,
+    ...(drawing ? { drawing } : {}),
     connectors,
     pins
+  }
+}
+
+// ---- 부품 그림 원본 (037b)
+
+const COLOR = /^#[0-9a-f]{6}$/i
+const TEXT_ALIGNS: readonly TextAlign[] = ['left', 'center', 'right']
+
+function optColor(o: Record<string, unknown>, key: string, path: string, errors: Errors): { [k: string]: string } {
+  const v = o[key]
+  if (v === undefined) return {}
+  if (typeof v === 'string' && COLOR.test(v)) return { [key]: v }
+  errors.push('{path}: 색은 #rrggbb 형식이어야 합니다', { path: path + key })
+  return {}
+}
+
+function optBool(o: Record<string, unknown>, key: string, path: string, errors: Errors): { [k: string]: true } {
+  const v = o[key]
+  if (v === undefined || v === false) return {}
+  if (v === true) return { [key]: true }
+  errors.push('{path}: true/false여야 합니다', { path: path + key })
+  return {}
+}
+
+function optNum(o: Record<string, unknown>, key: string, path: string, errors: Errors, range: { min?: number; max?: number } = {}): { [k: string]: number } {
+  if (o[key] === undefined) return {}
+  const n = num(o, key, path, errors, range)
+  return n === undefined ? {} : { [key]: n }
+}
+
+function readDrawing(v: unknown, path: string, errors: Errors): Drawing | undefined {
+  if (!isObject(v)) return notObject(path, errors)
+  const width = num(v, 'width', path, errors, { min: DRAWING_MIN, max: DRAWING_MAX })
+  const height = num(v, 'height', path, errors, { min: DRAWING_MIN, max: DRAWING_MAX })
+  const background = optColor(v, 'background', path, errors)
+  const shapes = list(v, 'shapes', path, errors, (s, p) => readShape(s, p, errors))
+  if (shapes.length > SHAPES_MAX) errors.push('{path}: 범위를 벗어났습니다 ({value})', { path: `${path}shapes`, value: shapes.length })
+  checkUnique(shapes, `${path}shapes`, errors)
+  if (width === undefined || height === undefined) return undefined
+  return { width, height, ...background, shapes }
+}
+
+function readShape(v: unknown, path: string, errors: Errors): Shape | undefined {
+  if (!isObject(v)) return notObject(path, errors)
+  const id = str(v, 'id', path, errors)
+  const x = num(v, 'x', path, errors)
+  const y = num(v, 'y', path, errors)
+  const base = {
+    ...optNum(v, 'rotation', path, errors, { min: -360, max: 360 }),
+    ...optNum(v, 'opacity', path, errors, { min: 0, max: 1 }),
+    ...optBool(v, 'locked', path, errors)
+  }
+  const size = (key: 'w' | 'h') => num(v, key, path, errors, { min: 0, max: DRAWING_MAX * 4 })
+  const paint = () => ({ ...optColor(v, 'fill', path, errors), ...optColor(v, 'stroke', path, errors), ...optNum(v, 'strokeWidth', path, errors, { min: 0, max: 200 }) })
+  if (id === undefined || x === undefined || y === undefined) return undefined
+  const head = { id, x, y, ...base }
+  switch (v.type) {
+    case 'rect': {
+      const w = size('w')
+      const h = size('h')
+      const extra = { ...paint(), ...optNum(v, 'radius', path, errors, { min: 0, max: DRAWING_MAX }) }
+      return w === undefined || h === undefined ? undefined : { ...head, type: 'rect', w, h, ...extra }
+    }
+    case 'ellipse': {
+      const w = size('w')
+      const h = size('h')
+      const extra = paint()
+      return w === undefined || h === undefined ? undefined : { ...head, type: 'ellipse', w, h, ...extra }
+    }
+    case 'line': {
+      const points = v.points
+      const ok = Array.isArray(points) && points.length >= 4 && points.length % 2 === 0 && points.every((n) => typeof n === 'number' && Number.isFinite(n))
+      if (!ok) errors.push('{path}: 배열이어야 합니다', { path: `${path}points` })
+      const stroke = typeof v.stroke === 'string' && COLOR.test(v.stroke) ? v.stroke : undefined
+      if (!stroke) errors.push('{path}: 색은 #rrggbb 형식이어야 합니다', { path: `${path}stroke` })
+      const strokeWidth = num(v, 'strokeWidth', path, errors, { min: 0, max: 200 })
+      const extra = { ...optBool(v, 'arrowStart', path, errors), ...optBool(v, 'arrowEnd', path, errors), ...optBool(v, 'dashed', path, errors) }
+      if (!ok || !stroke || strokeWidth === undefined) return undefined
+      return { ...head, type: 'line', points: [...(points as number[])], stroke, strokeWidth, ...extra }
+    }
+    case 'text': {
+      const w = size('w')
+      const text = str(v, 'text', path, errors)
+      const fontSize = num(v, 'fontSize', path, errors, { min: 1, max: 1000 })
+      const color = typeof v.color === 'string' && COLOR.test(v.color) ? v.color : undefined
+      if (!color) errors.push('{path}: 색은 #rrggbb 형식이어야 합니다', { path: `${path}color` })
+      const align = v.align
+      if (align !== undefined && !TEXT_ALIGNS.includes(align as TextAlign)) errors.push('{path}: 범위를 벗어났습니다 ({value})', { path: `${path}align`, value: String(align) })
+      const extra = { ...optBool(v, 'bold', path, errors), ...(align !== undefined && TEXT_ALIGNS.includes(align as TextAlign) ? { align: align as TextAlign } : {}) }
+      if (w === undefined || text === undefined || fontSize === undefined || !color) return undefined
+      return { ...head, type: 'text', w, text, fontSize, color, ...extra }
+    }
+    case 'image': {
+      const w = size('w')
+      const h = size('h')
+      const src = str(v, 'src', path, errors)
+      if (src !== undefined && !src.startsWith('data:image/')) errors.push('{path}: 이미지 data URL이 아닙니다', { path: `${path}src` })
+      if (w === undefined || h === undefined || src === undefined || !src.startsWith('data:image/')) return undefined
+      return { ...head, type: 'image', w, h, src }
+    }
+    default:
+      errors.push('{path}: 알 수 없는 도형입니다', { path: `${path}type` })
+      return undefined
   }
 }
 

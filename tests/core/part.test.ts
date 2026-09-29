@@ -79,7 +79,7 @@ describe('커넥터', () => {
 
 describe('저장 전 검사', () => {
   it('이름과 사진이 없으면 오류', () => {
-    expect(checkDraft(emptyPartDraft('p')).errors).toEqual(['이름을 입력하세요', '사진을 불러오세요'])
+    expect(checkDraft(emptyPartDraft('p')).errors).toEqual(['이름을 입력하세요', '사진을 불러오거나 그림을 그리세요'])
   })
 
   it('같은 커넥터 안 중복 번호는 경고', () => {

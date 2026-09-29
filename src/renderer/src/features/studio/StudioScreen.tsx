@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { nanoid } from 'nanoid'
 import logoUrl from '@/assets/logo.svg'
 import { SUPPLY_KINDS, type PartDef, type Supply, type SupplyKind } from '@core/model'
@@ -7,6 +7,7 @@ import { emptyPartDraft } from '@core/part'
 import { PartEditor } from '@/features/part-editor/PartEditor'
 import { SupplyEditor } from '@/features/library/SupplyEditor'
 import { ImportDialog } from '@/features/library/ImportDialog'
+import { HelpDialog } from '@/features/help/HelpDialog'
 import { applyImport } from '@/app/libraryCommands'
 import { useLibraryStore } from '@/stores/libraryStore'
 import { useSupplyStore } from '@/stores/supplyStore'
@@ -28,6 +29,20 @@ export function StudioScreen() {
   const importing = useUiStore((st) => st.importRequest)
   const [query, setQuery] = useState('')
   const [kindFilter, setKindFilter] = useState<SupplyKind | 'all'>('all')
+
+  // ? / F1 = 그림판 단축키 도움말
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target
+      if (el instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
+      if (e.key === 'F1' || e.key === '?') {
+        e.preventDefault()
+        useUiStore.getState().setHelpOpen(!useUiStore.getState().helpOpen)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const isFile = s.target.kind === 'file'
   const parts = isFile ? s.file.parts : mineParts
@@ -112,6 +127,9 @@ export function StudioScreen() {
           </button>
         </div>
         <div className="spacer" />
+        <button className="help-btn" onClick={() => useUiStore.getState().setHelpOpen(true)} title={t('단축키 도움말 (? / F1)')} aria-label={t('단축키 도움말')}>
+          ?
+        </button>
         <button onClick={() => goto('diagram')}>{t('배선도로 →')}</button>
         <div className="toolbar-group" role="group" aria-label="Language / 언어">
           <button className={locale === 'ko' ? 'toggle active' : 'toggle'} aria-pressed={locale === 'ko'} title="한국어" onClick={() => setLocale('ko')}>
@@ -247,6 +265,7 @@ export function StudioScreen() {
         )}
       </main>
 
+      <HelpDialog studio />
       {importing && (
         <ImportDialog
           request={importing}

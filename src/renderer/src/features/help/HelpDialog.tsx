@@ -1,21 +1,33 @@
 import { useEffect } from 'react'
-import { MOUSE_HELP, SHORTCUTS, formatCombo, type Shortcut } from '@core/keymap'
+import { MOUSE_HELP, SHORTCUTS, STUDIO_MOUSE_HELP, STUDIO_SHORTCUTS, formatCombo, type Combo } from '@core/keymap'
 import { useUiStore } from '@/stores/uiStore'
 import { useT } from '@/i18n'
 
-/** 분류 순서를 지키며 묶는다 */
-function grouped(): [string, Shortcut[]][] {
-  const out: [string, Shortcut[]][] = []
-  for (const s of SHORTCUTS) {
+interface Row {
+  id: string
+  group: string
+  description: string
+  combos: Combo[]
+}
+
+/** 분류 순서를 지키며 묶는다. 설명이 같은 줄(방향키 네 개 등)은 한 줄로 */
+function grouped(list: readonly Row[]): [string, Row[]][] {
+  const out: [string, Row[]][] = []
+  for (const s of list) {
     const last = out.find(([g]) => g === s.group)
-    if (last) last[1].push(s)
-    else out.push([s.group, [s]])
+    const same = last?.[1].find((r) => r.description === s.description)
+    if (same) same.combos = [...same.combos, ...s.combos].filter((c) => !c.shift)
+    else if (last) last[1].push({ ...s, combos: [...s.combos] })
+    else out.push([s.group, [{ ...s, combos: [...s.combos] }]])
   }
   return out
 }
 
-/** 단축키·마우스 조작 도움말. 내용은 core/keymap.ts 목록에서 만든다 (실제 동작과 같은 목록) */
-export function HelpDialog() {
+/**
+ * 단축키·마우스 조작 도움말. 내용은 core/keymap.ts 목록에서 만든다 (실제 동작과 같은 목록).
+ * studio면 부품 작업실 그림판 단축키 (037b)
+ */
+export function HelpDialog({ studio = false }: { studio?: boolean }) {
   const t = useT()
   const open = useUiStore((s) => s.helpOpen)
   const version = useUiStore((s) => s.appVersion)
@@ -38,11 +50,11 @@ export function HelpDialog() {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal help-dialog" role="dialog" aria-label={t('단축키 도움말')}>
         <header className="modal-header">
-          <h2>{t('단축키 도움말')}</h2>
+          <h2>{studio ? t('단축키 도움말 — 부품 그림판') : t('단축키 도움말')}</h2>
         </header>
         <div className="help-body">
           <div className="help-columns">
-            {grouped().map(([group, items]) => (
+            {grouped(studio ? STUDIO_SHORTCUTS : SHORTCUTS).map(([group, items]) => (
               <section key={group} className="help-group">
                 <h3>{t(group)}</h3>
                 <table>
@@ -69,7 +81,7 @@ export function HelpDialog() {
             <h3>{t('마우스')}</h3>
             <table>
               <tbody>
-                {MOUSE_HELP.map((m) => (
+                {(studio ? STUDIO_MOUSE_HELP : MOUSE_HELP).map((m) => (
                   <tr key={m.gesture}>
                     <td className="help-keys">{t(m.gesture)}</td>
                     <td>{t(m.description)}</td>

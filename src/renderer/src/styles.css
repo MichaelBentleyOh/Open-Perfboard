@@ -121,6 +121,132 @@ button.brand {
   flex: 1;
   max-height: none;
 }
+/* 편집기 안 [그림 | 핀] 탭 (037b) */
+.editor-view-tabs {
+  margin: 8px 12px 0;
+  align-self: flex-start;
+}
+/* 그림판 */
+.drawing-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.drawing-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.drawing-tools .segmented button {
+  min-width: 34px;
+  font-size: 15px;
+}
+.drawing-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 230px;
+}
+.drawing-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #e9ecef;
+}
+.drawing-canvas[data-tool='rect'],
+.drawing-canvas[data-tool='ellipse'],
+.drawing-canvas[data-tool='line'] {
+  cursor: crosshair;
+}
+.drawing-canvas[data-tool='text'] {
+  cursor: text;
+}
+.drawing-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.9);
+  color: var(--muted);
+  font-size: 12px;
+}
+.drawing-props {
+  padding: 10px 12px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.drawing-props h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.drawing-props .field {
+  grid-template-columns: 70px 1fr;
+}
+.drawing-props .field input:not([type='checkbox']):not([type='color']),
+.drawing-props .field textarea,
+.drawing-props .field select {
+  min-width: 0;
+  width: 100%;
+}
+.drawing-props .price-row input[inputmode='numeric'] {
+  width: 64px;
+}
+.drawing-props .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.drawing-props .button-row button {
+  padding: 3px 7px;
+}
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.drawing-props .hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* 작업실 부속 부품 편집기: 왼쪽 그림판 + 오른쪽 칸 */
+.studio-editor .supply-editor-body {
+  padding: 0;
+  gap: 0;
+}
+.supply-drawing {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.studio-editor .supply-fields {
+  width: 380px;
+  flex: none;
+  padding: 12px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+}
+.studio-editor .supply-fields .field {
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+.studio-editor .supply-fields .field input,
+.studio-editor .supply-fields .field select {
+  min-width: 0;
+}
 .studio-empty {
   margin: auto;
   text-align: center;

@@ -122,7 +122,8 @@ export function checkDraft(draft: PartDraft, t: T = ko): DraftCheck {
   const errors: string[] = []
   const warnings: string[] = []
   if (!draft.name.trim()) errors.push(t('이름을 입력하세요'))
-  if (!draft.image) errors.push(t('사진을 불러오세요'))
+  // 그림을 그렸으면 저장할 때 구워서 사진이 된다 (037b)
+  if (!draft.image && !draft.drawing?.shapes.length) errors.push(t('사진을 불러오거나 그림을 그리세요'))
   if (draft.pins.some((p) => !p.number.trim())) errors.push(t('비어 있는 핀 번호가 있습니다'))
   const url = draft.purchaseUrl?.trim()
   if (url && !isHttpUrl(url)) errors.push(t('구매 링크는 http:// 또는 https://로 시작해야 합니다'))
@@ -157,6 +158,7 @@ export function finalizeDraft(draft: PartDraft): PartDef | undefined {
     id: draft.id,
     name: draft.name.trim(),
     image: draft.image,
+    ...(draft.drawing ? { drawing: draft.drawing } : {}),
     connectors: draft.connectors.map((c) => ({ ...c, name: c.name.trim(), type: c.type.trim() })),
     pins: draft.pins.map((p) => ({ ...p, number: p.number.trim() }))
   }

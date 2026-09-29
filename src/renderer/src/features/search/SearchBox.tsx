@@ -15,7 +15,7 @@ const KIND_LABEL: Record<SearchKind, string> = {
 }
 
 /** 결과로 가기: 그 배선도 탭으로, 배선도 보기로, 그 자리로 화면을 옮기고 고른다 */
-export function goToHit(hit: SearchHit, showDiagram: () => void): void {
+function goToHit(hit: SearchHit, showDiagram: () => void): void {
   showDiagram()
   useWorkspaceStore.getState().switchTo(hit.sheetId)
   // 탭을 바꾸면 캔버스가 그 배선도의 화면 위치를 먼저 되살린다 → 그 뒤에 옮긴다

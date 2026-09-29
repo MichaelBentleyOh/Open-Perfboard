@@ -106,6 +106,62 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'help', group: G.help, description: msg('이 도움말'), combos: [{ key: '?' }, { key: 'f1' }], scope: 'app' }
 ]
 
+// ---- 부품 작업실 그림판 (037b). 배선도와 따로 동작하므로 같은 키(V, R …)를 다른 뜻으로 쓴다
+
+export type StudioShortcutId =
+  | 'toolSelect' | 'toolRect' | 'toolEllipse' | 'toolLine' | 'toolText'
+  | 'undo' | 'redo' | 'copy' | 'paste' | 'duplicate' | 'selectAll' | 'delete' | 'escape' | 'finishLine'
+  | 'front' | 'back' | 'forward' | 'backward'
+  | 'nudgeLeft' | 'nudgeRight' | 'nudgeUp' | 'nudgeDown'
+
+export interface StudioShortcut {
+  id: StudioShortcutId
+  group: string
+  description: string
+  combos: Combo[]
+}
+
+const GS = { tool: msg('그리기 도구'), edit: msg('그림 편집'), order: msg('순서·위치') }
+/** 방향키: Shift를 누르면 10px (둘 다 같은 동작, 거리만 다름) */
+const arrow = (key: string): Combo[] => [{ key }, { key, shift: true }]
+
+export const STUDIO_SHORTCUTS: readonly StudioShortcut[] = [
+  { id: 'toolSelect', group: GS.tool, description: msg('선택 (고르기·옮기기·크기)'), combos: [plain('v')] },
+  { id: 'toolRect', group: GS.tool, description: msg('상자 (Shift = 정사각형)'), combos: [plain('r')] },
+  { id: 'toolEllipse', group: GS.tool, description: msg('원·타원 (Shift = 정원)'), combos: [plain('o')] },
+  { id: 'toolLine', group: GS.tool, description: msg('선 (끌기 = 직선, 클릭마다 꺾기, 두 번 클릭·Enter = 끝)'), combos: [plain('l')] },
+  { id: 'toolText', group: GS.tool, description: msg('글상자'), combos: [plain('t')] },
+  { id: 'finishLine', group: GS.tool, description: msg('그리던 꺾은선 끝내기'), combos: [{ key: 'enter' }] },
+  { id: 'escape', group: GS.tool, description: msg('그리기 취소 → 선택 해제'), combos: [{ key: 'escape' }] },
+
+  { id: 'undo', group: GS.edit, description: msg('실행 취소'), combos: [ctrl('z')] },
+  { id: 'redo', group: GS.edit, description: msg('다시 실행'), combos: [ctrl('y')] },
+  { id: 'copy', group: GS.edit, description: msg('복사'), combos: [ctrl('c')] },
+  { id: 'paste', group: GS.edit, description: msg('붙여넣기'), combos: [ctrl('v')] },
+  { id: 'duplicate', group: GS.edit, description: msg('복제'), combos: [ctrl('d')] },
+  { id: 'selectAll', group: GS.edit, description: msg('전체 선택'), combos: [ctrl('a')] },
+  { id: 'delete', group: GS.edit, description: msg('선택한 것 삭제'), combos: [plain('delete'), plain('backspace')] },
+
+  { id: 'front', group: GS.order, description: msg('맨 앞으로'), combos: [ctrl(']', true), { key: '}', ctrl: true, alias: true }] },
+  { id: 'back', group: GS.order, description: msg('맨 뒤로'), combos: [ctrl('[', true), { key: '{', ctrl: true, alias: true }] },
+  { id: 'forward', group: GS.order, description: msg('앞으로'), combos: [ctrl(']')] },
+  { id: 'backward', group: GS.order, description: msg('뒤로'), combos: [ctrl('[')] },
+  { id: 'nudgeLeft', group: GS.order, description: msg('1px 옮기기 (Shift = 10px)'), combos: arrow('arrowleft') },
+  { id: 'nudgeRight', group: GS.order, description: msg('1px 옮기기 (Shift = 10px)'), combos: arrow('arrowright') },
+  { id: 'nudgeUp', group: GS.order, description: msg('1px 옮기기 (Shift = 10px)'), combos: arrow('arrowup') },
+  { id: 'nudgeDown', group: GS.order, description: msg('1px 옮기기 (Shift = 10px)'), combos: arrow('arrowdown') }
+]
+
+/** 부품 그림판의 마우스 조작 (037b) */
+export const STUDIO_MOUSE_HELP: readonly { gesture: string; description: string }[] = [
+  { gesture: msg('휠'), description: msg('확대/축소 (마우스 위치 기준)') },
+  { gesture: msg('도형 끌기'), description: msg('옮기기 (고른 것 모두)') },
+  { gesture: msg('손잡이 끌기'), description: msg('크기 바꾸기 · 위쪽 둥근 손잡이 = 회전') },
+  { gesture: msg('빈 곳 드래그'), description: msg('여러 개 선택 (상자 안에 다 들어온 것)') },
+  { gesture: msg('Ctrl/Shift+클릭'), description: msg('선택에 추가·빼기') },
+  { gesture: msg('글상자 두 번 누르기'), description: msg('글 고치기 (오른쪽 칸)') }
+]
+
 /** 도움말에 보일 마우스 조작 */
 export const MOUSE_HELP: readonly { gesture: string; description: string }[] = [
   { gesture: msg('휠'), description: msg('확대/축소 (마우스 위치 기준)') },
@@ -140,6 +196,11 @@ const KEY_LABEL: Record<string, string> = {
   backspace: 'Backspace',
   home: 'Home',
   f1: 'F1',
+  enter: 'Enter',
+  arrowleft: '←',
+  arrowright: '→',
+  arrowup: '↑',
+  arrowdown: '↓',
   NumpadAdd: 'Num +',
   NumpadSubtract: 'Num −'
 }

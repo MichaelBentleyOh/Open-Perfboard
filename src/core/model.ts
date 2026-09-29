@@ -1,7 +1,7 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
-/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 */
-export const PROJECT_FILE_VERSION = 7
+/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) */
+export const PROJECT_FILE_VERSION = 8
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -9,6 +9,79 @@ export interface PartImage {
   data: string
   width: number
   height: number
+}
+
+// ---- 부품 그림 원본 (037b). 부품 작업실에서 그린 도형. 배선도는 구운 PNG(image)만 쓴다
+
+/** 도형 공통: x, y = 왼쪽 위 (그림판 픽셀), 회전은 그 점 기준 (도) */
+interface ShapeBase {
+  id: string
+  x: number
+  y: number
+  rotation?: number
+  /** 0~1, 없으면 1 */
+  opacity?: number
+  /** 잠그면 고르거나 옮길 수 없다 (배경 사진 등) */
+  locked?: boolean
+}
+/** 채우기·선 색은 #rrggbb. 없으면 그리지 않는다 */
+export interface RectShape extends ShapeBase {
+  type: 'rect'
+  w: number
+  h: number
+  /** 모서리 둥글기 */
+  radius?: number
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+}
+export interface EllipseShape extends ShapeBase {
+  type: 'ellipse'
+  w: number
+  h: number
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+}
+/** 선: points는 (x, y) 기준 상대 좌표 [x0, y0, x1, y1, …] (꺾은선) */
+export interface LineShape extends ShapeBase {
+  type: 'line'
+  points: number[]
+  stroke: string
+  strokeWidth: number
+  arrowStart?: boolean
+  arrowEnd?: boolean
+  dashed?: boolean
+}
+export type TextAlign = 'left' | 'center' | 'right'
+export interface TextShape extends ShapeBase {
+  type: 'text'
+  /** 글상자 너비 (넘치면 줄바꿈) */
+  w: number
+  text: string
+  fontSize: number
+  color: string
+  bold?: boolean
+  align?: TextAlign
+}
+export interface ImageShape extends ShapeBase {
+  type: 'image'
+  w: number
+  h: number
+  /** data:image/… URL */
+  src: string
+}
+export type Shape = RectShape | EllipseShape | LineShape | TextShape | ImageShape
+export type ShapeType = Shape['type']
+
+/** 그림판. 크기 = 구운 PNG의 비율, 핀 좌표(0~1)의 기준 */
+export interface Drawing {
+  width: number
+  height: number
+  /** 없으면 투명 */
+  background?: string
+  /** 뒤에 있는 것부터 */
+  shapes: Shape[]
 }
 
 /** 커넥터는 부품의 속성이다 (예: J1 = "JST-XH 4P") */
@@ -48,6 +121,8 @@ export interface PartDef {
   /** 첨부(데이터시트·핀아웃). 목록만, 본문은 라이브러리 첨부 폴더 (core/attachment.ts) */
   attachments?: Attachment[]
   image: PartImage
+  /** 부품 작업실에서 그린 원본 (037b). 있으면 image는 이것을 구운 것 */
+  drawing?: Drawing
   connectors: Connector[]
   pins: Pin[]
 }
@@ -230,6 +305,8 @@ export interface Supply {
   currency?: Currency
   memo?: string
   image?: PartImage
+  /** 부품 작업실에서 그린 원본 (037b) */
+  drawing?: Drawing
   /** housing: 짝이 되는 커넥터 종류 (부품 커넥터의 type과 같은 문자열, 예: "JST-XH 4P") */
   connectorType?: string
   /** housing: 쓰는 단자 (kind = 'terminal'의 id) */
