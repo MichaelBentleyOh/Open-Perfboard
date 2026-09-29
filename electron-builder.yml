@@ -1,5 +1,6 @@
 appId: com.openperfboard.app
 productName: Open Perfboard
+copyright: Copyright (C) 2026 Minsik Oh
 directories:
   output: dist
 files:

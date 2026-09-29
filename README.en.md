@@ -135,6 +135,8 @@ The same commands work on Linux (Ubuntu, Fedora). You need a CJK font (Ubuntu `f
 
 ## License
 
-[GPL-3.0-or-later](LICENSE). Anyone may use and modify it; if you distribute a modified version, you must publish its source too.
+Copyright (C) 2026 Minsik Oh
+
+[GPL-3.0-or-later](LICENSE). Anyone may use and modify it; if you distribute it or a modified version, you must publish the full source under the same license and keep the copyright notice above.
 
 > This project has been developed by Claude Code.

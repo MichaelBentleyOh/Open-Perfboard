@@ -95,6 +95,7 @@ export function HelpDialog({ studio = false }: { studio?: boolean }) {
           <div className="messages">
             <span className="hint-text">{t('? 또는 F1로 열고 닫을 수 있습니다')}</span>
             {version && <span className="hint-text app-version"> · Open Perfboard v{version}</span>}
+            <span className="hint-text app-copyright"> · © 2026 Minsik Oh · GPL-3.0-or-later</span>
           </div>
           <button className="primary" onClick={close}>
             {t('닫기')}
