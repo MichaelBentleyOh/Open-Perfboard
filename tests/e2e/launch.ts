@@ -57,6 +57,9 @@ export function appCommand(args: string[] = []): { executablePath?: string; comm
   return { command: electronPath as unknown as string, args: ['.', ...args] }
 }
 
+/** E2E 창 안쪽 크기 (테스트를 만든 개발 PC에서 1400×900 창이 화면 작업 영역에 맞춰 열린 안쪽 크기) */
+const E2E_SIZE = { width: 1386, height: 787 }
+
 /**
  * 앱을 띄우고 로딩 화면이 끝날 때까지 기다린다. 홈이 뜨면 "배선도 만들기"를 눌러 배선도 화면으로 들어간다 (036).
  * home: true면 홈에 머문다. 홈 위에 대화상자(작업 복구 등)가 떠 있으면 누르지 않는다 → 테스트가 처리한 뒤 enterDiagram
@@ -69,6 +72,13 @@ export async function launchApp(userData: string, o: { args?: string[]; env?: Re
   // confirm/alert는 위 stub(main의 showMessageBox)이 처리한다.
   // 리스너가 없으면 Playwright가 직접 닫으려다 실패하므로 빈 리스너를 둔다.
   win.on('dialog', () => {})
+  // 창 크기를 늘 같게: CI 가상 화면(Windows 1024×768 등)이 작으면 OS가 창을 줄여 배치가 달라지고,
+  // 좌표로 끄는 테스트가 개발 PC와 다르게 움직인다. 화면보다 커도 그리기·입력은 된다
+  await app.evaluate(({ BrowserWindow }, size) => {
+    const w = BrowserWindow.getAllWindows()[0]
+    const [cw, ch] = w?.getContentSize() ?? []
+    if (w && (cw !== size.width || ch !== size.height)) w.setContentSize(size.width, size.height)
+  }, E2E_SIZE)
   await win.locator('.home, .app').first().waitFor()
   if (!o.home && (await win.locator('.home').count()) > 0 && (await win.getByRole('dialog').count()) === 0) await enterDiagram(win)
   return { app, win }

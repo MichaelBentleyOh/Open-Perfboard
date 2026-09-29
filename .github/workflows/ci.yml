@@ -54,7 +54,7 @@ jobs:
       - run: npm ci
       - name: E2E (Linux, 가상 화면)
         if: runner.os == 'Linux'
-        run: set -o pipefail; xvfb-run -a npm run test:e2e 2>&1 | tee ci.log
+        run: set -o pipefail; xvfb-run -a -s "-screen 0 1920x1080x24" npm run test:e2e 2>&1 | tee ci.log
       - name: E2E (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -96,7 +96,7 @@ jobs:
           npx electron-vite build 2>&1 | tee ci.log
           npx electron-builder --linux --publish never 2>&1 | tee ci.log
       - name: 포장된 앱(linux-unpacked)으로 E2E
-        run: set -o pipefail; xvfb-run -a npm run test:packaged -- --skip-dist 2>&1 | tee ci.log
+        run: set -o pipefail; xvfb-run -a -s "-screen 0 1920x1080x24" npm run test:packaged -- --skip-dist 2>&1 | tee ci.log
       - name: deb 설치 확인
         run: set -o pipefail; sudo apt-get install -y ./dist/*.deb 2>&1 | tee ci.log
       - name: 실패하면 마지막 출력을 주석으로 (로그인 없이 보이게)
@@ -149,7 +149,7 @@ jobs:
           useradd -m tester
           chown -R tester "$GITHUB_WORKSPACE"
           runuser -u tester -- env PATH="$PATH" OPB_E2E_EXE="/opt/Open Perfboard/open-perfboard" \
-            xvfb-run -a npx playwright test -c playwright.packaged.config.ts
+            xvfb-run -a -s "-screen 0 1920x1080x24" npx playwright test -c playwright.packaged.config.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
