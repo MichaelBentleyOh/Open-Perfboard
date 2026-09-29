@@ -21,13 +21,14 @@ const bundleFilter = () => ({ name: mt('Open Perfboard 배선도 묶음'), exten
 /** 열기: .opb와 .zip 둘 다 */
 const openFilter = () => ({ name: mt('Open Perfboard 배선도 (.opb, .zip)'), extensions: [PROJECT_EXT.slice(1), BUNDLE_EXT.slice(1)] })
 
-type ExportKind = 'csv' | 'xlsx' | 'png' | 'opblib'
+type ExportKind = 'csv' | 'xlsx' | 'png' | 'opblib' | 'kicad_sch'
 /** 필터 이름은 원문(한국어), 대화상자를 띄울 때 번역 */
 const EXPORT_KINDS: Record<ExportKind, { ext: string; filter: FileFilter }> = {
   csv: { ext: '.csv', filter: { name: 'CSV (Excel)', extensions: ['csv'] } },
   xlsx: { ext: '.xlsx', filter: { name: 'Excel 통합 문서', extensions: ['xlsx'] } },
   png: { ext: '.png', filter: { name: 'PNG 이미지', extensions: ['png'] } },
-  opblib: { ext: '.opblib', filter: { name: 'Open Perfboard 부품 라이브러리', extensions: ['opblib'] } }
+  opblib: { ext: '.opblib', filter: { name: 'Open Perfboard 부품 라이브러리', extensions: ['opblib'] } },
+  kicad_sch: { ext: '.kicad_sch', filter: { name: 'KiCad 회로도', extensions: ['kicad_sch'] } }
 }
 
 const windowOf = (e: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender) ?? undefined
@@ -165,7 +166,7 @@ export function registerIpc(): void {
 
   // ---- 내보내기
   ipcMain.handle('export:save', async (e, kind: unknown, suggestedName: unknown, data: unknown) => {
-    if (typeof kind !== 'string' || !Object.hasOwn(EXPORT_KINDS, kind)) throw new Error('kind: csv, xlsx, png, opblib')
+    if (typeof kind !== 'string' || !Object.hasOwn(EXPORT_KINDS, kind)) throw new Error('kind: csv, xlsx, png, opblib, kicad_sch')
     assertString(suggestedName, 'suggestedName')
     if (typeof data !== 'string' && !(data instanceof Uint8Array)) throw new Error('data: 문자열 또는 바이트')
     const { ext, filter } = EXPORT_KINDS[kind as ExportKind]

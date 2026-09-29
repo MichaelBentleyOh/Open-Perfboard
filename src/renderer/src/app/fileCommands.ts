@@ -2,6 +2,7 @@
 // 흐름: core로 직렬화/검증 → window.api로 파일 I/O → 스토어 갱신
 import type { PartDef, Supply } from '@core/model'
 import { renderSchematicPng } from '@/features/schematic/schematicRender'
+import { exportKicadSchematic } from '@core/kicad'
 import { emptyProject } from '@core/ops'
 import { serializeProject } from '@core/serialize'
 import { embedLibrary, importSummary, planImport } from '@core/library'
@@ -190,7 +191,7 @@ export async function saveDocument(saveAs = false): Promise<boolean> {
   }
 }
 
-async function exportFile(kind: 'csv' | 'xlsx' | 'png', suffix: string, data: string | Uint8Array): Promise<void> {
+async function exportFile(kind: 'csv' | 'xlsx' | 'png' | 'kicad_sch', suffix: string, data: string | Uint8Array): Promise<void> {
   const name = `${documentName(useDocumentStore.getState().filePath)}-${suffix}`
   try {
     const saved = await window.api.export.save(kind, name, data)
@@ -225,6 +226,20 @@ export async function exportPng(): Promise<void> {
     return
   }
   await exportFile('png', t('배선도'), dataUrlBytes(url))
+}
+
+/** KiCad 회로도 (040): 지금 배선도의 회로도를 .kicad_sch 하나로 */
+export async function exportKicad(): Promise<void> {
+  const project = useProjectStore.getState().project
+  if (project.instances.length === 0) {
+    notify(t('내보낼 부품이 없습니다'))
+    return
+  }
+  const title = project.name || documentName(useDocumentStore.getState().filePath)
+  const d = new Date()
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const text = exportKicadSchematic(project, { title, date, newUuid: () => crypto.randomUUID() })
+  await exportFile('kicad_sch', project.name || t('회로도'), text)
 }
 
 /** 회로도 (039): 회로도 탭을 열지 않았어도 그린다 */

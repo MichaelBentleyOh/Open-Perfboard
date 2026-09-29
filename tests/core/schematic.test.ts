@@ -167,6 +167,15 @@ describe('회로도 (039)', () => {
     expect(parseProject(JSON.stringify(raw)).ok).toBe(false)
   })
 
+  it('저장된 기호에 놓지 않은 핀이 있으면 회로도에서는 빈 자리에 채워 쓴다', () => {
+    const base = schematicSymbol(sensor)
+    const partial = { ...sensor, symbol: { ...base, pins: base.pins.filter((p) => p.pinId !== 'a') } }
+    const s = schematicSymbol(partial)
+    expect(s.pins.map((p) => p.pinId).sort()).toEqual(['a', 'g', 'v'])
+    expect(new Set(s.pins.map((p) => `${p.x},${p.y}`)).size).toBe(3)
+    expect(schematicSymbol(partial)).toBe(s) // 부품마다 한 번만
+  })
+
   it('v9 파일은 그대로 열린다', () => {
     const raw = JSON.parse(serializeProject(board()))
     raw.version = 9

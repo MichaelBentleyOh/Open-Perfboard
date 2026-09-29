@@ -817,6 +817,8 @@ export const EN: Record<string, string> = {
   '누르면 지금 기호를 바꿉니다 (Ctrl+Z로 되돌리기). 신호 이름(A·K, B·C·E, IN+·OUT…)이 맞는 핀을 그 자리에 놓습니다.': 'Replaces the current symbol (Ctrl+Z to undo). Pins whose signal names match (A·K, B·C·E, IN+·OUT…) go to those spots.',
   '회로도': 'Schematic',
   '회로도 이미지 (PNG)': 'Schematic image (PNG)',
+  'KiCad 회로도 (.kicad_sch)': 'KiCad schematic (.kicad_sch)',
+  '지금 배선도의 회로도를 KiCad 7 이상에서 열리는 파일로 (기호 포함)': 'Save this diagram’s schematic as a file KiCad 7 or later can open (symbols included)',
   '회로도 도구': 'Schematic tools',
   '↻ 회전': '↻ Rotate',
   '⇋ 반전': '⇋ Mirror',

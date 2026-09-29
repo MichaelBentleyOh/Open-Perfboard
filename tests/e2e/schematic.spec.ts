@@ -86,6 +86,18 @@ test('회로도: 배선도 부품이 기호로 → 끌기(격자)·회전·실�
     await win.getByRole('menuitem', { name: '회로도 이미지 (PNG)' }).click()
     await expect.poll(() => existsSync(png)).toBe(true)
     expect([...readFileSync(png).subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
+
+    // KiCad 회로도 (040): 기호 2개가 파일 안에, 넷 라벨로 보이던 넷은 라벨로
+    const sch = join(out, 'board')
+    await stubDialogs(app, { save: sch })
+    await win.getByText('내보내기 ▾').click()
+    await win.getByRole('menuitem', { name: 'KiCad 회로도 (.kicad_sch)' }).click()
+    await expect.poll(() => existsSync(`${sch}.kicad_sch`)).toBe(true)
+    const text = readFileSync(`${sch}.kicad_sch`, 'utf8')
+    expect(text.startsWith('(kicad_sch (version 20230121)')).toBe(true)
+    expect(text.match(/\(lib_id "open_perfboard:/g)).toHaveLength(2)
+    expect(text).toContain('(reference "U1")')
+    expect(text).toContain('(label "GND"')
   } finally {
     await app.close()
   }

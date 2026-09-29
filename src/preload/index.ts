@@ -71,7 +71,7 @@ const api = {
   },
   export: {
     /** 저장 대화상자 + 쓰기. 저장된 경로, 취소하면 null */
-    save: (kind: 'csv' | 'xlsx' | 'png' | 'opblib', suggestedName: string, data: string | Uint8Array): Promise<string | null> =>
+    save: (kind: 'csv' | 'xlsx' | 'png' | 'opblib' | 'kicad_sch', suggestedName: string, data: string | Uint8Array): Promise<string | null> =>
       ipcRenderer.invoke('export:save', kind, suggestedName, data),
     /** 보고서 HTML을 PDF로 저장. 저장된 경로, 취소하면 null */
     pdf: (html: string, opts: { pageSize: 'A4' | 'A3'; landscape: boolean }, suggestedName: string): Promise<string | null> =>

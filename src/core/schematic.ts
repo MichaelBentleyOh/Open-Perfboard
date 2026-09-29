@@ -2,7 +2,7 @@
 // 연결은 배선도의 wires를 그대로 쓴다. 회로도가 따로 저장하는 것은 기호·접속점 자리와 라벨로 보일 전선뿐.
 // 좌표 1 = 5 mil. 기호 자리 (x, y) = 몸통 가운데를 격자에 맞춘 점(pivot) → 90° 단위로 돌려도 핀 끝이 격자 위
 import type { PartDef, PartSymbol, Project, SchPlacement, SchRotation, Schematic, SymbolPin, SymbolSide, Wire, WireEnd } from './model'
-import { autoSymbol, bodyBox, SYMBOL_GRID, SYMBOL_PIN_LENGTH, snapGrid, POWER_BOTTOM, POWER_TOP } from './symbol'
+import { autoSymbol, bodyBox, freeSpot, missingPins, placePin, syncSymbol, SYMBOL_GRID, SYMBOL_PIN_LENGTH, snapGrid, POWER_BOTTOM, POWER_TOP } from './symbol'
 import { shapeBounds, unionBox, type Box } from './drawing'
 import { byId } from './lookup'
 import { naturalCompare } from './sort'
@@ -21,15 +21,26 @@ const ceilGrid = (v: number) => Math.ceil(v / SYMBOL_GRID) * SYMBOL_GRID
 
 const autoCache = new WeakMap<PartDef, PartSymbol>()
 
-/** 부품의 회로도 기호. 저장된 기호가 없으면 기본 기호 (부품 정의마다 한 번만 만든다) */
+/**
+ * 부품의 회로도 기호 (부품 정의마다 한 번만 만든다). 저장된 기호가 없으면 기본 기호,
+ * 저장된 기호에 놓지 않은 핀이 있으면 빈 자리에 채운다 (회로도·KiCad에서 모든 핀이 이어질 수 있게)
+ */
 export function schematicSymbol(part: PartDef): PartSymbol {
-  if (part.symbol) return part.symbol
   let s = autoCache.get(part)
-  if (!s) {
+  if (s) return s
+  if (part.symbol) {
+    const missing = missingPins(part, part.symbol)
+    if (missing.length === 0) return part.symbol
+    s = syncSymbol(part, part.symbol)
+    for (const p of missing) {
+      const spot = freeSpot(s)
+      s = placePin(s, p.id, spot, spot.side)
+    }
+  } else {
     let n = 0
     s = autoSymbol(part, () => `auto-${++n}`)
-    autoCache.set(part, s)
   }
+  autoCache.set(part, s)
   return s
 }
 
@@ -329,6 +340,11 @@ function netRoots(wires: readonly Wire[]): { rootOf: Map<string, number>; nets: 
     else nets.set(n, [w])
   }
   return { rootOf, nets }
+}
+
+/** 전선 id → 넷 번호 (0부터, 이어진 전선끼리 같은 번호) */
+export function wireNets(project: Project): Map<string, number> {
+  return netRoots(project.wires).rootOf
 }
 
 /** 같은 넷의 전선 id (자기 포함) */

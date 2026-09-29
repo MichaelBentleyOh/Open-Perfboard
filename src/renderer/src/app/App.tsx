@@ -29,6 +29,7 @@ import {
   exportPdf,
   exportPng,
   exportSchematicPng,
+  exportKicad,
   newDocument,
   openDocument,
   openRecent,
@@ -260,6 +261,9 @@ export default function App() {
             </button>
             <button role="menuitem" onClick={runExport(exportSchematicPng)}>
               {t('회로도 이미지 (PNG)')}
+            </button>
+            <button role="menuitem" onClick={runExport(exportKicad)} title={t('지금 배선도의 회로도를 KiCad 7 이상에서 열리는 파일로 (기호 포함)')}>
+              {t('KiCad 회로도 (.kicad_sch)')}
             </button>
             <button role="menuitem" onClick={openPdf} title="Ctrl+P">
               {t('PDF (배선도·BOM·결선표)…')}

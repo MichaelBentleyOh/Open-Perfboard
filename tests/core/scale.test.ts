@@ -14,6 +14,7 @@ import type { Project, Supply } from '@core/model'
 import { supplyUsage } from '@core/supply'
 import { wirePath } from '@core/wire'
 import { buildSchematicScene } from '@core/schematic'
+import { exportKicadSchematic } from '@core/kicad'
 import { synthProject } from '../perf/synth'
 
 const time = (fn: () => unknown): number => {
@@ -55,6 +56,12 @@ describe('큰 배선도: 전선 수에 비례해서만 느려진다', () => {
     const paths = (p: Project) =>
       p.wires.map((w) => ({ id: w.id, path: wirePath(endPosition(p, w.from)!, w.points, endPosition(p, w.to)!, w.orthogonal) }))
     expect(growth(1000, (p) => { const g = paths(p); return () => findCrossings(g) })).toBeLessThan(LINEAR_ENOUGH)
+  })
+
+  it('KiCad 회로도 내보내기 (040)', () => {
+    let n = 0
+    const o = { title: 't', date: '2026-01-01', newUuid: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }
+    expect(growth(500, (p) => () => exportKicadSchematic(p, o))).toBeLessThan(LINEAR_ENOUGH)
   })
 
   it('회로도 장면 (자동 배치·핀·선·넷 라벨, 039)', () => {
