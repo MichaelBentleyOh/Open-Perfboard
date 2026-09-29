@@ -24,6 +24,8 @@ import { PinCanvas, type PinTool } from './PinCanvas'
 import { connectorColor } from './connectorColor'
 import { evenPoints, pinsOnGuide, respacePins, type Guide, type Point } from '@core/guide'
 import { drawingFromImage, emptyDrawing } from '@core/drawing'
+import { PIN_ELECTRICALS, type PinElectrical } from '@core/model'
+import { PIN_ELECTRICAL_LABEL, autoSymbol } from '@core/symbol'
 import { DrawingPanel } from '@/features/studio/drawing/DrawingPanel'
 import { bakeDrawing, PART_BAKE_MAX } from '@/features/studio/drawing/bake'
 import { useT } from '@/i18n'
@@ -69,7 +71,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   const count = Math.min(200, Math.max(1, Math.floor(Number(evenCount)) || 1))
 
   // 그림 (037b, 작업실에서만): 그림 탭에서 그리고, 핀 탭으로 갈 때·저장할 때 PNG로 굽는다
-  const [view, setView] = useState<'draw' | 'pins'>(variant === 'panel' && (isNew || initial.drawing) ? 'draw' : 'pins')
+  const [view, setView] = useState<'draw' | 'pins' | 'symbol'>(variant === 'panel' && (isNew || initial.drawing) ? 'draw' : 'pins')
   /** 그림을 고쳤는데 아직 사진으로 굽지 않았다 */
   const stale = useRef(false)
   const [baking, setBaking] = useState(false)
@@ -79,6 +81,11 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   const drawingNow = useMemo(
     () => draft.drawing ?? (draft.image ? drawingFromImage(draft.image.data, draft.image.width, draft.image.height, 'photo') : emptyDrawing()),
     [draft.drawing, draft.image]
+  )
+  /** 회로도 기호 (038): 저장된 게 없으면 지금 핀으로 만든 기본 기호를 보여 준다 (고치기 전까지 draft는 그대로) */
+  const symbolNow = useMemo(
+    () => draft.symbol ?? autoSymbol({ name: draft.name, pins: draft.pins, connectors: draft.connectors }, nanoid),
+    [draft.symbol, draft.name, draft.pins, draft.connectors]
   )
   /** 고친 그림을 사진으로 굽는다. 구운 draft를 돌려준다 */
   const bake = async (d: PartDraft): Promise<PartDraft> => {
@@ -216,10 +223,42 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                 <button role="tab" aria-selected={view === 'pins'} className={view === 'pins' ? 'active' : ''} onClick={showPins} disabled={baking}>
                   {baking ? t('사진 만드는 중…') : t('● 핀')}
                 </button>
+                <button role="tab" aria-selected={view === 'symbol'} className={view === 'symbol' ? 'active' : ''} onClick={() => setView('symbol')}>
+                  {t('⎍ 기호')}
+                </button>
               </div>
             )}
-            {variant === 'panel' && view === 'draw' ? (
+            {variant === 'panel' && view === 'symbol' ? (
               <DrawingPanel
+                key="symbol"
+                drawing={symbolNow.drawing}
+                pins={[]}
+                symbol={{
+                  extras: { pins: symbolNow.pins, ...(symbolNow.showNumbers === false ? { showNumbers: false } : {}), ...(symbolNow.showNames === false ? { showNames: false } : {}) },
+                  partName: draft.name,
+                  partPins: draft.pins,
+                  connectors: draft.connectors,
+                  onElectrical: (pinId, value) => setDraft((d) => updatePin(d, pinId, { electrical: value }))
+                }}
+                onChange={(drawing, _pins, extras) =>
+                  setDraft((d) => {
+                    const cur = d.symbol ?? symbolNow
+                    const e = extras ?? cur
+                    return {
+                      ...d,
+                      symbol: {
+                        drawing,
+                        pins: e.pins,
+                        ...(e.showNumbers === false ? { showNumbers: false } : {}),
+                        ...(e.showNames === false ? { showNames: false } : {})
+                      }
+                    }
+                  })
+                }
+              />
+            ) : variant === 'panel' && view === 'draw' ? (
+              <DrawingPanel
+                key="draw"
                 drawing={drawingNow}
                 pins={draft.pins}
                 onChange={(drawing, pins) => {
@@ -514,6 +553,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                     <th>{t('번호')}</th>
                     <th>{t('신호')}</th>
                     <th>{t('커넥터')}</th>
+                    <th>{t('전기 종류')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -551,6 +591,20 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                           {draft.connectors.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          aria-label={t('전기 종류')}
+                          title={t('KiCad 핀 종류·시뮬레이션에 쓰입니다')}
+                          value={p.electrical ?? 'passive'}
+                          onChange={(e) => setDraft((d) => updatePin(d, p.id, { electrical: e.target.value as PinElectrical }))}
+                        >
+                          {PIN_ELECTRICALS.map((k) => (
+                            <option key={k} value={k}>
+                              {t(PIN_ELECTRICAL_LABEL[k])}
                             </option>
                           ))}
                         </select>

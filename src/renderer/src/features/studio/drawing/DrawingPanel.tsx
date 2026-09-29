@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
-import type { Drawing, Pin, Shape, TextAlign } from '@core/model'
+import { PIN_ELECTRICALS, SYMBOL_SIDES, type Connector, type Drawing, type Pin, type PinElectrical, type Shape, type SymbolPin, type SymbolSide, type TextAlign } from '@core/model'
+import { PIN_ELECTRICAL_LABEL, SYMBOL_PIN_LENGTH, autoSymbol, fitSymbol, freeSpot, missingPins, overlappingPins, pinLabel, placePin } from '@core/symbol'
 import {
   alignShapes,
   clampSize,
@@ -21,10 +22,28 @@ import { msg } from '@core/i18n'
 import { useT } from '@/i18n'
 import { DrawingCanvas, type DrawTool } from './DrawingCanvas'
 
-/** 한 번의 사용자 동작 전 상태. 핀은 그림판 크기를 바꿀 때만 함께 돌아간다 */
+/** 기호 모드에서 그림과 함께 고치는 것 (038) */
+export interface SymbolExtras {
+  pins: SymbolPin[]
+  showNumbers?: boolean
+  showNames?: boolean
+}
+
+/** 회로도 기호 모드 (038): 격자 항상 켬, 사진 넣기 없음, 기호 핀 층 */
+export interface SymbolMode {
+  extras: SymbolExtras
+  partName: string
+  partPins: readonly Pin[]
+  connectors: readonly Connector[]
+  /** 핀의 전기 종류는 부품 핀의 성질 → 편집기 draft에서 바꾼다 (그림판 실행 취소 밖) */
+  onElectrical: (pinId: string, value: PinElectrical) => void
+}
+
+/** 한 번의 사용자 동작 전 상태. 핀은 그림판 크기를 바꿀 때만, 기호 핀은 기호 모드에서 늘 함께 돌아간다 */
 interface Snapshot {
   drawing: Drawing
   pins?: Pin[]
+  extras?: SymbolExtras
 }
 
 /** 작업실 안 복사한 도형 (다른 부품 그림에 붙여넣기 가능) */
@@ -45,21 +64,32 @@ const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.is
 interface Props {
   drawing: Drawing
   pins: readonly Pin[]
-  /** 그림이 바뀜 (pins가 있으면 핀도 함께 바뀜: 그림판 크기) */
-  onChange: (d: Drawing, pins?: Pin[]) => void
+  /** 그림이 바뀜 (pins가 있으면 핀도 함께 바뀜: 그림판 크기, extras가 있으면 기호 핀도) */
+  onChange: (d: Drawing, pins?: Pin[], extras?: SymbolExtras) => void
   /** 사진 넣기의 긴 변 한도 */
   maxImageSide?: number
+  /** 있으면 회로도 기호 모드 */
+  symbol?: SymbolMode
 }
 
 /**
  * 부품 그림판 (037b): 도구 막대 + 그림판 + 속성 칸.
  * 실행 취소 기록은 이 패널 안에만 있다 (작업실 전용, 배선도 기록과 따로)
  */
-export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: Props) {
+export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600, symbol }: Props) {
   const t = useT()
   const [tool, setTool] = useState<DrawTool>('select')
-  const [selected, setSelected] = useState<string[]>([])
-  const [grid, setGrid] = useState(false)
+  const [selected, setSelectedShapes] = useState<string[]>([])
+  /** 고른 기호 핀 (도형 선택과 함께 쓰지 않는다) */
+  const [selectedPin, setSelectedPin] = useState<string | null>(null)
+  const setSelected = (ids: string[] | ((prev: string[]) => string[])) => {
+    setSelectedShapes(ids)
+    setSelectedPin(null)
+  }
+  const [gridPref, setGrid] = useState(false)
+  // 기호는 핀 끝점이 격자 위에 있어야 하므로 늘 격자 맞춤
+  const grid = symbol ? true : gridPref
+  const extras = symbol?.extras
   const [past, setPast] = useState<Snapshot[]>([])
   const [future, setFuture] = useState<Snapshot[]>([])
   const [finishSignal, setFinishSignal] = useState(0)
@@ -69,24 +99,30 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
   const fileRef = useRef<HTMLInputElement>(null)
 
   // 키 처리기는 ref로 최신 값을 읽는다
-  const state = useRef({ drawing, pins, selected, tool, past, future })
-  state.current = { drawing, pins, selected, tool, past, future }
+  const state = useRef({ drawing, pins, selected, selectedPin, tool, past, future, extras })
+  state.current = { drawing, pins, selected, selectedPin, tool, past, future, extras }
 
-  /** 한 동작을 반영하고 기록에 남긴다 */
-  const commit = (next: Drawing, nextPins?: Pin[]) => {
+  /** 지금 상태를 기록용으로 (기호 모드면 기호 핀도) */
+  const snap = (withPins: boolean): Snapshot => {
     const cur = state.current
-    if (next === cur.drawing && !nextPins) return
-    setPast((p) => [...p.slice(-199), { drawing: cur.drawing, ...(nextPins ? { pins: [...cur.pins] } : {}) }])
-    setFuture([])
-    onChange(next, nextPins)
+    return { drawing: cur.drawing, ...(withPins ? { pins: [...cur.pins] } : {}), ...(cur.extras ? { extras: cur.extras } : {}) }
   }
+  /** 한 동작을 반영하고 기록에 남긴다 */
+  const commit = (next: Drawing, nextPins?: Pin[], nextExtras?: SymbolExtras) => {
+    const cur = state.current
+    if (next === cur.drawing && !nextPins && !nextExtras) return
+    setPast((p) => [...p.slice(-199), snap(!!nextPins)])
+    setFuture([])
+    onChange(next, nextPins, nextExtras)
+  }
+  const commitExtras = (next: SymbolExtras) => commit(state.current.drawing, undefined, next)
   const undo = () => {
     const cur = state.current
     const last = cur.past[cur.past.length - 1]
     if (!last) return
     setPast(cur.past.slice(0, -1))
-    setFuture([...cur.future, { drawing: cur.drawing, ...(last.pins ? { pins: [...cur.pins] } : {}) }])
-    onChange(last.drawing, last.pins)
+    setFuture([...cur.future, snap(!!last.pins)])
+    onChange(last.drawing, last.pins, last.extras)
     setSelected((s) => s.filter((id) => last.drawing.shapes.some((x) => x.id === id)))
   }
   const redo = () => {
@@ -94,9 +130,11 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
     const next = cur.future[cur.future.length - 1]
     if (!next) return
     setFuture(cur.future.slice(0, -1))
-    setPast([...cur.past, { drawing: cur.drawing, ...(next.pins ? { pins: [...cur.pins] } : {}) }])
-    onChange(next.drawing, next.pins)
+    setPast([...cur.past, snap(!!next.pins)])
+    onChange(next.drawing, next.pins, next.extras)
   }
+  /** 기호로 보는 지금 모습 (core 기호 함수에 넘길 때) */
+  const symbolNow = () => ({ drawing: state.current.drawing, ...state.current.extras!, pins: state.current.extras!.pins })
 
   const sel = drawing.shapes.filter((s) => selected.includes(s.id))
   const one = sel.length === 1 ? sel[0]! : undefined
@@ -146,6 +184,11 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
       case 'selectAll':
         return setSelected(cur.drawing.shapes.filter((s) => !s.locked).map((s) => s.id))
       case 'delete':
+        // 기호 핀을 지우면 기호에서만 빠진다 (부품 핀은 그대로, "놓지 않은 핀"으로)
+        if (cur.selectedPin && cur.extras) {
+          commitExtras({ ...cur.extras, pins: cur.extras.pins.filter((p) => p.pinId !== cur.selectedPin) })
+          return setSelectedPin(null)
+        }
         if (ids.length === 0) return
         commit(removeShapes(cur.drawing, ids))
         return setSelected([])
@@ -158,9 +201,15 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
       case 'nudgeRight':
       case 'nudgeUp':
       case 'nudgeDown': {
-        const n = shift ? 10 : 1
+        const n = shift || symbol ? 10 : 1
         const dx = id === 'nudgeLeft' ? -n : id === 'nudgeRight' ? n : 0
         const dy = id === 'nudgeUp' ? -n : id === 'nudgeDown' ? n : 0
+        // 기호 핀은 격자 한 칸씩, 쪽은 그대로
+        if (cur.selectedPin && cur.extras) {
+          const sp = cur.extras.pins.find((p) => p.pinId === cur.selectedPin)
+          if (sp) commitExtras({ ...cur.extras, pins: placePin(symbolNow(), sp.pinId, { x: sp.x + dx, y: sp.y + dy }, sp.side).pins })
+          return
+        }
         if (ids.length) commit(moveShapes(cur.drawing, ids, dx, dy))
         return
       }
@@ -205,6 +254,14 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
     setMessage(r.clamped ? t('그림판 밖으로 나간 핀 {n}개를 가장자리로 옮겼습니다', { n: r.clamped }) : null)
   }
 
+  /** 기호 핀 글자: 핀 id → 번호(J1.3)·이름(신호) */
+  const partPins = symbol?.partPins
+  const connectors = symbol?.connectors
+  const labels = useMemo(
+    () => Object.fromEntries((partPins ?? []).map((p) => [p.id, { number: pinLabel(connectors ?? [], p), name: p.signal ?? '' }])),
+    [partPins, connectors]
+  )
+
   const order = (o: Order) => commit(reorder(drawing, selected, o))
   const align = (a: Align) => commit(alignShapes(drawing, selected, a))
   const colorOf = (key: 'fill' | 'stroke' | 'color') => {
@@ -230,24 +287,29 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
             </button>
           ))}
         </div>
-        <button onClick={() => fileRef.current?.click()} title={t('사진을 도형으로 넣기 (PNG·JPG·WebP)')}>
-          {t('🖼 사진 넣기')}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          hidden
-          accept="image/png,image/jpeg,image/webp"
-          data-testid="drawing-image-input"
-          onChange={(e) => {
-            addImage(e.target.files?.[0])
-            e.target.value = ''
-          }}
-        />
-        <label className="check">
-          <input type="checkbox" checked={grid} onChange={(e) => setGrid(e.target.checked)} />
-          {t('격자 맞춤 ({n}px)', { n: 10 })}
-        </label>
+        {!symbol && (
+          <>
+            <button onClick={() => fileRef.current?.click()} title={t('사진을 도형으로 넣기 (PNG·JPG·WebP)')}>
+              {t('🖼 사진 넣기')}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              hidden
+              accept="image/png,image/jpeg,image/webp"
+              data-testid="drawing-image-input"
+              onChange={(e) => {
+                addImage(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+            <label className="check">
+              <input type="checkbox" checked={grid} onChange={(e) => setGrid(e.target.checked)} />
+              {t('격자 맞춤 ({n}px)', { n: 10 })}
+            </label>
+          </>
+        )}
+        {symbol && <span className="hint">{t('격자 50 mil · 핀 끝점은 격자에 붙습니다')}</span>}
         <div className="spacer" />
         <button onClick={undo} disabled={past.length === 0} aria-label={t('실행 취소')} title={t('실행 취소 (Ctrl+Z)')}>
           ↶
@@ -260,7 +322,7 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
       <div className="drawing-body">
         <DrawingCanvas
           drawing={drawing}
-          pins={pins}
+          pins={symbol ? [] : pins}
           tool={tool}
           selected={selected}
           grid={grid}
@@ -271,10 +333,60 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600 }: P
           makeId={nanoid}
           finishLineSignal={finishSignal}
           cancelSignal={cancelSignal}
+          symbolLayer={
+            symbol && extras
+              ? {
+                  pins: extras.pins,
+                  labels,
+                  showNumbers: extras.showNumbers !== false,
+                  showNames: extras.showNames !== false,
+                  selected: selectedPin,
+                  onSelect: (id) => {
+                    setSelectedShapes([])
+                    setSelectedPin(id)
+                  },
+                  onMove: (id, at) => commitExtras({ ...state.current.extras!, pins: placePin(symbolNow(), id, at).pins })
+                }
+              : undefined
+          }
         />
 
         <aside className="drawing-props" aria-label={t('도형 속성')}>
-          {sel.length === 0 ? (
+          {symbol && extras && selectedPin ? (
+            <SymbolPinProps
+              pin={extras.pins.find((p) => p.pinId === selectedPin)}
+              partPin={symbol.partPins.find((p) => p.id === selectedPin)}
+              label={labels[selectedPin]}
+              onChange={(next) => commitExtras({ ...extras, pins: extras.pins.map((p) => (p.pinId === next.pinId ? next : p)) })}
+              onElectrical={(v) => symbol.onElectrical(selectedPin, v)}
+              onRemove={() => run('delete', false)}
+            />
+          ) : sel.length === 0 && symbol && extras ? (
+            <SymbolSection
+              symbol={symbol}
+              drawing={drawing}
+              extras={extras}
+              labels={labels}
+              onResize={(w, h) => commit({ ...drawing, width: w, height: h })}
+              onFit={() => {
+                const r = fitSymbol(symbolNow())
+                commit(r.drawing, undefined, { ...extras, pins: r.pins })
+              }}
+              onExtras={commitExtras}
+              onPlace={(pinId) => {
+                const spot = freeSpot(symbolNow())
+                commitExtras({ ...extras, pins: placePin(symbolNow(), pinId, spot, spot.side).pins })
+                setSelectedShapes([])
+                setSelectedPin(pinId)
+              }}
+              onRebuild={() => {
+                if (drawing.shapes.length && !window.confirm(t('지금 기호를 지우고 기본 기호로 다시 만들까요?'))) return
+                const auto = autoSymbol({ name: symbol.partName, pins: [...symbol.partPins], connectors: [...symbol.connectors] }, nanoid)
+                commit(auto.drawing, undefined, { ...extras, pins: auto.pins })
+                setSelected([])
+              }}
+            />
+          ) : sel.length === 0 ? (
             <>
               <h4>{t('그림판')}</h4>
               <ArtboardSize width={drawing.width} height={drawing.height} onApply={resize} />
@@ -488,5 +600,135 @@ function CheckBox({ label, value, onChange }: { label: string; value: boolean; o
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
+  )
+}
+
+/** 고른 기호 핀: 쪽·길이·전기 종류 */
+function SymbolPinProps({
+  pin,
+  partPin,
+  label,
+  onChange,
+  onElectrical,
+  onRemove
+}: {
+  pin: SymbolPin | undefined
+  partPin: Pin | undefined
+  label: { number: string; name: string } | undefined
+  onChange: (p: SymbolPin) => void
+  onElectrical: (v: PinElectrical) => void
+  onRemove: () => void
+}) {
+  const t = useT()
+  if (!pin || !partPin) return null
+  const SIDE_NAMES: Record<SymbolSide, string> = { left: t('왼쪽'), right: t('오른쪽'), top: t('위'), bottom: t('아래') }
+  return (
+    <>
+      <h4>
+        {t('기호 핀')} {label?.number}
+        {label?.name ? ` · ${label.name}` : ''}
+      </h4>
+      <label className="field">
+        <span>{t('붙는 쪽')}</span>
+        <select aria-label={t('붙는 쪽')} value={pin.side} onChange={(e) => onChange({ ...pin, side: e.target.value as SymbolSide })}>
+          {SYMBOL_SIDES.map((s) => (
+            <option key={s} value={s}>
+              {SIDE_NAMES[s]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <NumberRow
+        label={t('핀 길이')}
+        value={pin.length ?? SYMBOL_PIN_LENGTH}
+        min={0}
+        max={200}
+        onChange={(v) => {
+          const length = Math.round(v / 10) * 10
+          const { length: _, ...rest } = pin
+          onChange(length === SYMBOL_PIN_LENGTH ? rest : { ...rest, length })
+        }}
+      />
+      <label className="field">
+        <span>{t('전기 종류')}</span>
+        <select aria-label={t('전기 종류')} value={partPin.electrical ?? 'passive'} onChange={(e) => onElectrical(e.target.value as PinElectrical)}>
+          {PIN_ELECTRICALS.map((k) => (
+            <option key={k} value={k}>
+              {t(PIN_ELECTRICAL_LABEL[k])}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="hint">{t('끌어서 옮기면 격자와 몸통 가장자리에 맞춰집니다. 방향키 = 한 칸. 신호 이름은 핀 탭에서 고칩니다.')}</p>
+      <div className="button-row">
+        <button onClick={onRemove} title={t('기호에서만 뺍니다 (부품 핀은 그대로)')}>
+          {t('기호에서 빼기')}
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** 아무것도 안 골랐을 때 (기호 모드): 그림판 크기, 놓지 않은 핀, 보이기, 기본 기호 */
+function SymbolSection({
+  symbol,
+  drawing,
+  extras,
+  labels,
+  onResize,
+  onFit,
+  onExtras,
+  onPlace,
+  onRebuild
+}: {
+  symbol: SymbolMode
+  drawing: Drawing
+  extras: SymbolExtras
+  labels: Record<string, { number: string; name: string }>
+  onResize: (w: number, h: number) => void
+  onFit: () => void
+  onExtras: (e: SymbolExtras) => void
+  onPlace: (pinId: string) => void
+  onRebuild: () => void
+}) {
+  const t = useT()
+  const missing = missingPins({ pins: [...symbol.partPins], connectors: [...symbol.connectors] }, { drawing, ...extras })
+  const overlaps = overlappingPins({ drawing, ...extras })
+  return (
+    <>
+      <h4>{t('기호')}</h4>
+      <ArtboardSize width={drawing.width} height={drawing.height} onApply={onResize} />
+      <button onClick={onFit} title={t('도형과 핀 둘레에 맞게 그림판 크기를 맞춥니다')}>
+        {t('내용에 맞추기')}
+      </button>
+      <div className="check-row">
+        <CheckBox label={t('핀 번호')} value={extras.showNumbers !== false} onChange={(v) => onExtras({ ...extras, showNumbers: v ? undefined : false })} />
+        <CheckBox label={t('핀 이름')} value={extras.showNames !== false} onChange={(v) => onExtras({ ...extras, showNames: v ? undefined : false })} />
+      </div>
+      <h4>{t('놓지 않은 핀 ({n})', { n: missing.length })}</h4>
+      {missing.length === 0 ? (
+        <p className="hint">{t('모든 핀을 기호에 놓았습니다.')}</p>
+      ) : (
+        <ul className="missing-pins" aria-label={t('놓지 않은 핀')}>
+          {missing.map((p) => (
+            <li key={p.id}>
+              <button onClick={() => onPlace(p.id)} title={t('빈 자리에 놓기')}>
+                {labels[p.id]?.number ?? p.number}
+                {p.signal ? ` · ${p.signal}` : ''}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {overlaps.length > 0 && (
+        <p className="warning">
+          {t('끝점이 겹친 핀이 있습니다 (회로도에서 서로 이어져 버림): {pins}', {
+            pins: overlaps.map((ids) => ids.map((id) => labels[id]?.number ?? id).join('·')).join(', ')
+          })}
+        </p>
+      )}
+      <button onClick={onRebuild}>{t('기본 기호로 다시 만들기')}</button>
+      <p className="hint">{t('도형 도구로 몸통을 그리고, 핀을 끌어 자리를 잡으세요. 핀을 누르면 쪽·길이·전기 종류를 바꿀 수 있습니다.')}</p>
+    </>
   )
 }

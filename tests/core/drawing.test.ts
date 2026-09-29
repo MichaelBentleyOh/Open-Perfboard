@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Drawing, PartDef, Shape } from '../../src/core/model'
+import { PROJECT_FILE_VERSION, type Drawing, type PartDef, type Shape } from '../../src/core/model'
 import {
   addShape,
   alignShapes,
@@ -136,11 +136,11 @@ describe('그림 원본 파일 (037b)', () => {
     expect(parsePart(JSON.stringify(old)).ok).toBe(true)
   })
 
-  it('v7 배선도는 그대로 열리고 v8로 바뀐다', () => {
+  it('v7 배선도는 그대로 열리고 최신 버전으로 바뀐다', () => {
     const v7 = { version: 7, name: 'x', parts: { p1: { ...part, drawing: undefined } }, instances: [], wires: [] }
     const r = parseProjectFile(JSON.stringify(v7))
-    expect(r.ok && r.value.project.version).toBe(8)
-    const v9 = parseProjectFile(JSON.stringify({ ...v7, version: 9 }))
-    expect(v9.ok).toBe(false)
+    expect(r.ok && r.value.project.version).toBe(PROJECT_FILE_VERSION)
+    const newer = parseProjectFile(JSON.stringify({ ...v7, version: PROJECT_FILE_VERSION + 1 }))
+    expect(newer.ok).toBe(false)
   })
 })

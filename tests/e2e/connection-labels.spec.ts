@@ -11,7 +11,10 @@ test('결선표 연결 라벨: 방향은 결선표에서만, Goto/From 깃발, �
     await item.getByRole('button', { name: '편집' }).click()
     const dialog = win.getByRole('dialog')
     await expect(dialog.getByTestId('pin-table')).toBeVisible()
-    await expect(dialog.getByTestId('pin-table').locator('select')).toHaveCount(2) // 커넥터 선택만
+    // 핀마다 커넥터·전기 종류(038)만 있고, 신호 방향 칸은 없다
+    await expect(dialog.getByTestId('pin-table').getByLabel('전기 종류')).toHaveCount(2)
+    await expect(dialog.getByTestId('pin-table').locator('select')).toHaveCount(4)
+    await expect(dialog.getByTestId('pin-table').getByLabel('방향')).toHaveCount(0)
     await dialog.getByRole('button', { name: '취소' }).click()
 
     // 2. U1.핀2 → U2.핀1, 그리고 U2.핀2 → U3.핀1 (U3는 U1과 이어지지 않음)

@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
-import type { Drawing, Pin, Shape } from '@core/model'
+import type { Drawing, Pin, Shape, SymbolPin } from '@core/model'
 import { shapesInBox, updateShape } from '@core/drawing'
+import { pinLine, SYMBOL_GRID, SYMBOL_TEXT } from '@core/symbol'
 import { ellipseConfig, imageConfig, lineConfig, loadDrawingImages, rectConfig, textConfig } from './shapeNodes'
 import { useT } from '@/i18n'
 
@@ -37,7 +38,94 @@ interface Props {
   /** 꺾은선을 끝내라는 신호 (Enter, 바뀔 때마다 번호가 오름) */
   finishLineSignal: number
   cancelSignal: number
+  /** 회로도 기호 핀 층 (038). 있으면 핀을 그리고 끌어 옮길 수 있다 */
+  symbolLayer?: SymbolLayer
 }
+
+export interface SymbolLayer {
+  pins: readonly SymbolPin[]
+  /** 핀 id → 표시할 번호(J1.3)·이름(신호) */
+  labels: Record<string, { number: string; name: string }>
+  showNumbers: boolean
+  showNames: boolean
+  selected: string | null
+  onSelect: (pinId: string | null) => void
+  /** 끝점을 at에 놓았다 (격자 맞춤·쪽 결정은 받는 쪽이) */
+  onMove: (pinId: string, at: Point) => void
+}
+
+const PIN_COLOR = '#b71c1c'
+const PIN_SELECTED = '#2563eb'
+
+/** 기호 핀 하나: 선 + 끝점 동그라미 + 번호(선 위) + 이름(몸통 안) */
+const SymbolPinView = memo(function SymbolPinView({
+  pin,
+  label,
+  showNumber,
+  showName,
+  selected,
+  interactive,
+  scale,
+  onDown,
+  onMoved
+}: {
+  pin: SymbolPin
+  label: { number: string; name: string } | undefined
+  showNumber: boolean
+  showName: boolean
+  selected: boolean
+  interactive: boolean
+  scale: number
+  onDown: (id: string) => void
+  onMoved: (id: string, at: Point) => void
+}) {
+  const { x1, y1, x2, y2 } = pinLine(pin)
+  const color = selected ? PIN_SELECTED : PIN_COLOR
+  const vertical = pin.side === 'top' || pin.side === 'bottom'
+  const len = Math.abs(x2 - x1) + Math.abs(y2 - y1)
+  const T = SYMBOL_TEXT
+  // 번호: 선 옆(가로 핀은 위, 세로 핀은 왼쪽), 이름: 몸통 안쪽
+  const number = vertical
+    ? { x: x1 - 2, y: Math.max(y1, y2), width: len, rotation: -90, align: 'center' as const, offsetY: T + 1 }
+    : { x: Math.min(x1, x2), y: y1 - T - 2, width: len, rotation: 0, align: 'center' as const, offsetY: 0 }
+  const nameW = 200
+  const name =
+    pin.side === 'left'
+      ? { x: x2 + 4, y: y2 - T / 2, width: nameW, align: 'left' as const, rotation: 0 }
+      : pin.side === 'right'
+        ? { x: x2 - 4 - nameW, y: y2 - T / 2, width: nameW, align: 'right' as const, rotation: 0 }
+        : pin.side === 'top'
+          ? // -90° 돌린 글은 아래에서 위로 읽힌다 → 오른쪽 정렬이면 글 끝이 몸통 위 가장자리에 붙는다
+            { x: x2 - T / 2, y: y2 + 4 + nameW, width: nameW, align: 'right' as const, rotation: -90 }
+          : { x: x2 - T / 2, y: y2 - 4, width: nameW, align: 'left' as const, rotation: -90 }
+  return (
+    <Group
+      name="symbol-pin"
+      draggable={interactive}
+      listening={interactive}
+      onMouseDown={(e) => {
+        if (e.evt.button !== 0) return
+        e.cancelBubble = true
+        onDown(pin.pinId)
+      }}
+      onDragMove={(e) => {
+        // 끝점이 격자 위에 있도록 묶음 전체를 격자 단위로
+        e.target.position({ x: Math.round(e.target.x() / SYMBOL_GRID) * SYMBOL_GRID, y: Math.round(e.target.y() / SYMBOL_GRID) * SYMBOL_GRID })
+      }}
+      onDragEnd={(e) => {
+        const dx = e.target.x()
+        const dy = e.target.y()
+        e.target.position({ x: 0, y: 0 })
+        if (dx || dy) onMoved(pin.pinId, { x: pin.x + dx, y: pin.y + dy })
+      }}
+    >
+      <Line points={[x1, y1, x2, y2]} stroke={color} strokeWidth={2} hitStrokeWidth={10} lineCap="round" />
+      <Circle x={x1} y={y1} radius={Math.max(2, 3 / Math.sqrt(scale))} stroke={color} strokeWidth={1} fill="#ffffff" />
+      {showNumber && label && <Text {...number} text={label.number} fontSize={T * 0.9} fill={color} listening={false} />}
+      {showName && label?.name && <Text {...name} text={label.name} fontSize={T} fill="#000000" listening={false} />}
+    </Group>
+  )
+})
 
 /** 투명 배경을 나타내는 바둑판 무늬 */
 function checkerPattern(): HTMLCanvasElement {
@@ -241,6 +329,9 @@ export function DrawingCanvas(p: Props) {
     if (shift) cur.onSelect(cur.selected.includes(id) ? cur.selected.filter((x) => x !== id) : [...cur.selected, id])
     else if (!cur.selected.includes(id)) cur.onSelect([id])
   }
+
+  const onPinDown = (id: string) => props.current.symbolLayer?.onSelect(id)
+  const onPinMoved = (id: string, at: Point) => props.current.symbolLayer?.onMove(id, at)
 
   const onShapeDblClick = (id: string) => {
     const s = props.current.drawing.shapes.find((x) => x.id === id)
@@ -478,6 +569,20 @@ export function DrawingCanvas(p: Props) {
                 interactive={interactive && !s.locked}
                 onDown={onShapeDown}
                 onDblClick={onShapeDblClick}
+              />
+            ))}
+            {p.symbolLayer?.pins.map((sp) => (
+              <SymbolPinView
+                key={sp.pinId}
+                pin={sp}
+                label={p.symbolLayer!.labels[sp.pinId]}
+                showNumber={p.symbolLayer!.showNumbers}
+                showName={p.symbolLayer!.showNames}
+                selected={p.symbolLayer!.selected === sp.pinId}
+                interactive={interactive}
+                scale={view.scale}
+                onDown={onPinDown}
+                onMoved={onPinMoved}
               />
             ))}
             {/* 그림판 테두리 (밖으로 나간 부분은 PNG에 들어가지 않는다) */}

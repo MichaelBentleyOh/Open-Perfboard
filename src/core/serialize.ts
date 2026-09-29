@@ -31,7 +31,13 @@ import {
   type WireTubes,
   type Drawing,
   type Shape,
-  type TextAlign
+  type TextAlign,
+  PIN_ELECTRICALS,
+  type PinElectrical,
+  type PartSymbol,
+  SYMBOL_SIDES,
+  type SymbolPin,
+  type SymbolSide
 } from './model'
 import { DRAWING_MAX, DRAWING_MIN, SHAPES_MAX } from './drawing'
 import { isHttpUrl } from './url'
@@ -180,7 +186,9 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v7: 전선 길이(mm) 칸을 없애고 메모로 옮긴다 (027), BOM 통화·환율 (029)
   6: migrateWireLength,
   // v7 → v8: 부품·부속 부품 그림 원본(drawing, 037b)이 생김. 없는 파일은 그대로
-  7: (raw) => ({ ...raw, version: 8 })
+  7: (raw) => ({ ...raw, version: 8 }),
+  // v8 → v9: 회로도 기호(symbol)와 핀 전기 종류(electrical, 038)가 생김. 없는 파일은 그대로
+  8: (raw) => ({ ...raw, version: 9 })
 }
 
 /** v6 → v7: 전선 길이(length, mm)를 메모 뒤에 "L=250 mm"로 옮긴다 (값을 잃지 않게) */
@@ -387,6 +395,7 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
     errors.push('{path}: http:// 또는 https:// 주소여야 합니다', { path: `${path}purchaseUrl` })
   }
   const drawing = v.drawing === undefined ? undefined : readDrawing(v.drawing, `${path}drawing.`, errors)
+  const symbol = v.symbol === undefined ? undefined : readSymbol(v.symbol, `${path}symbol.`, pins, errors)
   if (id === undefined || name === undefined || !image) return undefined
   return {
     id,
@@ -402,9 +411,53 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
     image,
     ...(drawing ? { drawing } : {}),
+    ...(symbol ? { symbol } : {}),
     connectors,
     pins
   }
+}
+
+// ---- 회로도 기호 (038)
+
+function optElectrical(o: Record<string, unknown>, path: string, errors: Errors): { electrical?: PinElectrical } {
+  const v = o.electrical
+  if (v === undefined) return {}
+  if (PIN_ELECTRICALS.includes(v as PinElectrical)) return v === 'passive' ? {} : { electrical: v as PinElectrical }
+  errors.push('{path}: 범위를 벗어났습니다 ({value})', { path: `${path}electrical`, value: String(v) })
+  return {}
+}
+
+function readSymbol(v: unknown, path: string, pins: readonly Pin[], errors: Errors): PartSymbol | undefined {
+  if (!isObject(v)) return notObject(path, errors)
+  const drawing = readDrawing(v.drawing, `${path}drawing.`, errors)
+  const ids = new Set(pins.map((p) => p.id))
+  const seen = new Set<string>()
+  const symbolPins = list(v, 'pins', path, errors, (sp, p): SymbolPin | undefined => {
+    if (!isObject(sp)) return notObject(p, errors)
+    const pinId = str(sp, 'pinId', p, errors)
+    const x = num(sp, 'x', p, errors)
+    const y = num(sp, 'y', p, errors)
+    const side = sp.side
+    if (!SYMBOL_SIDES.includes(side as SymbolSide)) errors.push('{path}: 범위를 벗어났습니다 ({value})', { path: `${p}side`, value: String(side) })
+    const length = optNum(sp, 'length', p, errors, { min: 0, max: 1000 })
+    if (pinId !== undefined && !ids.has(pinId)) errors.push('{path}: 존재하지 않는 핀을 가리킵니다', { path: `${p}pinId` })
+    if (pinId !== undefined && seen.has(pinId)) errors.push("{path}: id '{id}'가 중복됩니다", { path: `${path}pins`, id: pinId })
+    if (pinId !== undefined) seen.add(pinId)
+    if (pinId === undefined || x === undefined || y === undefined || !SYMBOL_SIDES.includes(side as SymbolSide)) return undefined
+    return { pinId, x, y, side: side as SymbolSide, ...length }
+  })
+  const flags = { ...optBoolFalse(v, 'showNumbers', path, errors), ...optBoolFalse(v, 'showNames', path, errors) }
+  if (!drawing) return undefined
+  return { drawing, pins: symbolPins, ...flags }
+}
+
+/** 기본값이 true인 칸: false일 때만 남긴다 */
+function optBoolFalse(o: Record<string, unknown>, key: string, path: string, errors: Errors): { [k: string]: false } {
+  const v = o[key]
+  if (v === undefined || v === true) return {}
+  if (v === false) return { [key]: false }
+  errors.push('{path}: true/false여야 합니다', { path: path + key })
+  return {}
 }
 
 // ---- 부품 그림 원본 (037b)
@@ -558,7 +611,8 @@ function readPin(v: unknown, path: string, errors: Errors): Pin | undefined {
     ...optStr(v, 'signal', path, errors),
     ...optStr(v, 'connectorId', path, errors),
     x,
-    y
+    y,
+    ...optElectrical(v, path, errors)
   }
 }
 

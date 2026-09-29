@@ -1,12 +1,12 @@
 // 부품 정의 편집 연산 (부품 에디터용). 입력을 변경하지 않고 새 값을 반환한다.
-import type { Connector, PartDef, PartImage, Pin } from './model'
+import type { Connector, PartDef, PartImage, PartSymbol, Pin, PinElectrical } from './model'
 import { isHttpUrl } from './url'
 import { ko, type T } from './i18n'
 
 /** 사진을 아직 고르지 않은 편집 중 부품 */
 export type PartDraft = Omit<PartDef, 'image'> & { image?: PartImage }
 
-type HasPins = Pick<PartDef, 'pins' | 'connectors'>
+type HasPins = Pick<PartDef, 'pins' | 'connectors'> & { symbol?: PartSymbol }
 
 export function emptyPartDraft(id: string): PartDraft {
   return { id, name: '', connectors: [], pins: [] }
@@ -45,7 +45,7 @@ export function movePin<T extends HasPins>(part: T, pinId: string, x: number, y:
   }
 }
 
-export type PinPatch = { number?: string; signal?: string; connectorId?: string | null }
+export type PinPatch = { number?: string; signal?: string; connectorId?: string | null; electrical?: PinElectrical }
 
 /** 빈 문자열 signal과 null connectorId는 필드를 지운다 */
 export function updatePin<T extends HasPins>(part: T, pinId: string, patch: PinPatch): T {
@@ -63,13 +63,21 @@ export function updatePin<T extends HasPins>(part: T, pinId: string, patch: PinP
         if (patch.connectorId === null) delete next.connectorId
         else next.connectorId = patch.connectorId
       }
+      // 전기 종류: passive(기본)는 칸을 지운다
+      if (patch.electrical !== undefined) {
+        if (patch.electrical === 'passive') delete next.electrical
+        else next.electrical = patch.electrical
+      }
       return next
     })
   }
 }
 
+/** 핀을 지우면 회로도 기호의 그 핀도 지운다 (038) */
 export function removePin<T extends HasPins>(part: T, pinId: string): T {
-  return { ...part, pins: part.pins.filter((p) => p.id !== pinId) }
+  const next = { ...part, pins: part.pins.filter((p) => p.id !== pinId) }
+  if (part.symbol) next.symbol = { ...part.symbol, pins: part.symbol.pins.filter((sp) => sp.pinId !== pinId) }
+  return next
 }
 
 /** J1, J2 ... 중 다음 이름 */
@@ -159,6 +167,7 @@ export function finalizeDraft(draft: PartDraft): PartDef | undefined {
     name: draft.name.trim(),
     image: draft.image,
     ...(draft.drawing ? { drawing: draft.drawing } : {}),
+    ...(draft.symbol ? { symbol: draft.symbol } : {}),
     connectors: draft.connectors.map((c) => ({ ...c, name: c.name.trim(), type: c.type.trim() })),
     pins: draft.pins.map((p) => ({ ...p, number: p.number.trim() }))
   }

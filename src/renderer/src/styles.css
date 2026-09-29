@@ -221,6 +221,20 @@ button.brand {
   color: var(--muted);
   font-size: 12px;
 }
+/* 기호: 놓지 않은 핀 (038) */
+.missing-pins {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.missing-pins button {
+  padding: 2px 8px;
+  font-size: 12px;
+  border-style: dashed;
+}
 /* 작업실 부속 부품 편집기: 왼쪽 그림판 + 오른쪽 칸 */
 .studio-editor .supply-editor-body {
   padding: 0;

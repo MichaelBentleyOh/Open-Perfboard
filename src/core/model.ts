@@ -1,7 +1,7 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
-/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) */
-export const PROJECT_FILE_VERSION = 8
+/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) · v9: 회로도 기호·핀 전기 종류 (038) */
+export const PROJECT_FILE_VERSION = 9
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -91,6 +91,10 @@ export interface Connector {
   type: string
 }
 
+/** 핀의 전기 종류 (038). KiCad 핀 종류·시뮬레이션 GPIO에 쓴다. 신호 방향(Wire.direction)과는 따로 */
+export type PinElectrical = 'input' | 'output' | 'bidirectional' | 'passive' | 'power_in' | 'power_out' | 'open_collector' | 'no_connect'
+export const PIN_ELECTRICALS: readonly PinElectrical[] = ['passive', 'input', 'output', 'bidirectional', 'power_in', 'power_out', 'open_collector', 'no_connect']
+
 export interface Pin {
   id: string
   number: string
@@ -99,6 +103,34 @@ export interface Pin {
   /** 사진 기준 0~1 정규화 좌표 */
   x: number
   y: number
+  /** 없으면 passive */
+  electrical?: PinElectrical
+}
+
+// ---- 회로도 기호 (038). 좌표 1 = 5 mil (0.127 mm), 핀 끝점은 10 (= 50 mil, KiCad 격자) 배수
+
+export type SymbolSide = 'left' | 'right' | 'top' | 'bottom'
+export const SYMBOL_SIDES: readonly SymbolSide[] = ['left', 'right', 'top', 'bottom']
+
+/** 기호 위의 핀: 끝점(전선이 닿는 곳)과 몸통 쪽 */
+export interface SymbolPin {
+  /** 부품 핀 id (한 핀은 기호에 한 번) */
+  pinId: string
+  x: number
+  y: number
+  /** 몸통의 어느 쪽에 붙나 (left = 끝점이 왼쪽, 선이 오른쪽으로 몸통까지) */
+  side: SymbolSide
+  /** 없으면 SYMBOL_PIN_LENGTH */
+  length?: number
+}
+
+export interface PartSymbol {
+  /** 몸통 그림 (그림판 도형) */
+  drawing: Drawing
+  pins: SymbolPin[]
+  /** 없으면 보임 */
+  showNumbers?: boolean
+  showNames?: boolean
 }
 
 /** 라이브러리에 저장되는 부품 정의 */
@@ -123,6 +155,8 @@ export interface PartDef {
   image: PartImage
   /** 부품 작업실에서 그린 원본 (037b). 있으면 image는 이것을 구운 것 */
   drawing?: Drawing
+  /** 회로도 기호 (038). 없으면 회로도·KiCad가 기본 기호를 그때 만든다 */
+  symbol?: PartSymbol
   connectors: Connector[]
   pins: Pin[]
 }
