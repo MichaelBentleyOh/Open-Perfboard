@@ -11,6 +11,7 @@ import { chooseSupply, setSupplyChoice, setWireSupplies, type SupplyChoicePatch,
 import type { Point } from '@core/geometry'
 import { pasteClipboard, type ClipboardData, type PasteResult } from '@core/clipboard'
 import { avoidParts } from '@core/avoid'
+import { mirrorSymbols, moveSchematicItems, rotateSymbols, setNetLabels } from '@core/schematic'
 import { t } from '@/i18n'
 import {
   addInstance,
@@ -102,6 +103,11 @@ interface ProjectState {
   refreshPart: (part: PartDef) => number
   /** core 함수 하나로 고친다 (여러 배선도에 같은 편집을 할 때, 030). 바뀐 게 없으면 이력에 남기지 않는다 */
   apply: (fn: (p: Project) => Project) => void
+  /** 회로도 (039): 기호·접속점 옮기기(격자), 회전, 반전, 넷 라벨 */
+  moveSchematic: (items: { instances?: readonly string[]; junctions?: readonly string[] }, dx: number, dy: number) => void
+  rotateSymbols: (ids: readonly string[], delta: 90 | -90) => void
+  mirrorSymbols: (ids: readonly string[], axis: 'horizontal' | 'vertical') => void
+  setNetLabels: (wireIds: readonly string[], on: boolean) => void
   /** 새 문서/열기. 실행 취소 이력도 비운다 */
   reset: (project: Project) => void
 }
@@ -158,6 +164,22 @@ export const useProjectStore = create<ProjectState>()(
       updateInstance: (id, patch) => set({ project: avoidParts(withTidy(updateInstance(get().project, id, patch), [id]), { instances: [id] }) }),
       removeItems: (items) => set({ project: removeItems(get().project, items) }),
 
+      moveSchematic: (items, dx, dy) => {
+        const next = moveSchematicItems(get().project, items, dx, dy)
+        if (next !== get().project) set({ project: next })
+      },
+      rotateSymbols: (ids, delta) => {
+        const next = rotateSymbols(get().project, ids, delta)
+        if (next !== get().project) set({ project: next })
+      },
+      mirrorSymbols: (ids, axis) => {
+        const next = mirrorSymbols(get().project, ids, axis)
+        if (next !== get().project) set({ project: next })
+      },
+      setNetLabels: (wireIds, on) => {
+        const next = setNetLabels(get().project, wireIds, on)
+        if (next !== get().project) set({ project: next })
+      },
       connect: (from, to, { color, points, orthogonal }) => {
         const style = {
           color, width: 2,

@@ -90,8 +90,9 @@ test('부품 그림판: 상자·원·선·글 그리기 → 색 → 실행 취�
     expect(saved.drawing.shapes[3]).toMatchObject({ text: '모터 드라이버' })
     const rectX = saved.drawing.shapes[0].x
 
-    // 다시 열면 그림 탭에서 도형 그대로 → 옮기고 저장하면 원본이 바뀐다
-    await expect(editor.getByRole('tab', { name: '✏ 그림' })).toHaveAttribute('aria-selected', 'true')
+    // 저장해도 보던 탭(핀) 그대로 → 그림 탭에 도형 그대로 → 옮기고 저장하면 원본이 바뀐다
+    await expect(editor.getByRole('tab', { name: '● 핀' })).toHaveAttribute('aria-selected', 'true')
+    await editor.getByRole('tab', { name: '✏ 그림' }).click()
     await win.mouse.click(empty.x, empty.y)
     await expect(shapeCount(win)).toContainText('도형 4개')
     await win.mouse.click(r.x, r.y)

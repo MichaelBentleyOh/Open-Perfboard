@@ -29,6 +29,7 @@ import { PIN_ELECTRICAL_LABEL, autoSymbol } from '@core/symbol'
 import { DrawingPanel } from '@/features/studio/drawing/DrawingPanel'
 import { bakeDrawing, PART_BAKE_MAX } from '@/features/studio/drawing/bake'
 import { useT } from '@/i18n'
+import type { PartView } from '@/stores/studioStore'
 
 interface Props {
   initial: PartDraft
@@ -39,10 +40,13 @@ interface Props {
   variant?: 'modal' | 'panel'
   /** 고친 게 있는지 (작업실이 다른 항목으로 바꿀 때 묻는 데 씀) */
   onDirtyChange?: (dirty: boolean) => void
+  /** 작업실: 처음 보일 탭, 탭을 바꿀 때 알림 (저장 뒤 다시 열려도 보던 탭) */
+  initialView?: PartView
+  onViewChange?: (v: PartView) => void
 }
 
 /** 부품 추가/편집. 편집 내용은 저장 전까지 이 컴포넌트 안에만 있다 */
-export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange }: Props) {
+export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange, initialView, onViewChange }: Props) {
   const t = useT()
   const [draft, setDraft] = useState<PartDraft>(initial)
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null)
@@ -71,7 +75,12 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   const count = Math.min(200, Math.max(1, Math.floor(Number(evenCount)) || 1))
 
   // 그림 (037b, 작업실에서만): 그림 탭에서 그리고, 핀 탭으로 갈 때·저장할 때 PNG로 굽는다
-  const [view, setView] = useState<'draw' | 'pins' | 'symbol'>(variant === 'panel' && (isNew || initial.drawing) ? 'draw' : 'pins')
+  const [view, setView] = useState<PartView>(variant === 'panel' ? (initialView ?? (isNew || initial.drawing ? 'draw' : 'pins')) : 'pins')
+  const onViewRef = useRef(onViewChange)
+  onViewRef.current = onViewChange
+  useEffect(() => {
+    onViewRef.current?.(view)
+  }, [view])
   /** 그림을 고쳤는데 아직 사진으로 굽지 않았다 */
   const stale = useRef(false)
   const [baking, setBaking] = useState(false)

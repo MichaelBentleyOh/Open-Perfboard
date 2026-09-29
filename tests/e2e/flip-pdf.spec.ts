@@ -6,7 +6,7 @@ import { buildTwoPartDiagram, getProject, launchApp, makeUserDataDir, seedLibrar
 const pin = async (win: Page, i: string, p: string) =>
   (await win.evaluate(([i, p]) => window.__opbCanvas!.pinClientPosition(i, p), [i, p]))!
 
-test('부품 좌우·상하 반전 → 실행 취소 → PDF 내보내기(3쪽, 작성자·비고 저장)', async () => {
+test('부품 좌우·상하 반전 → 실행 취소 → PDF 내보내기(4쪽, 작성자·비고 저장)', async () => {
   const userData = makeUserDataDir()
   seedLibrary(userData, { purchaseUrl: 'https://www.devicemart.co.kr/goods/view?no=12345' })
   const { app, win } = await launchApp(userData)
@@ -67,7 +67,7 @@ test('부품 좌우·상하 반전 → 실행 취소 → PDF 내보내기(3쪽, 
     const pdf = readFileSync(pdfPath)
     expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-')
     const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []
-    expect(pages).toHaveLength(3)
+    expect(pages).toHaveLength(4) // 배선도·회로도(039)·BOM·결선표
 
     // 7. 작성자·비고는 문서에 저장 (저장 안 된 변경 표시)
     expect((await getProject(win)).meta).toEqual({ author: '테스터', notes: '배터리는 마지막에 연결\n퓨즈 5A' })

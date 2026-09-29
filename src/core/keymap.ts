@@ -129,7 +129,7 @@ export const STUDIO_SHORTCUTS: readonly StudioShortcut[] = [
   { id: 'toolSelect', group: GS.tool, description: msg('선택 (고르기·옮기기·크기)'), combos: [plain('v')] },
   { id: 'toolRect', group: GS.tool, description: msg('상자 (Shift = 정사각형)'), combos: [plain('r')] },
   { id: 'toolEllipse', group: GS.tool, description: msg('원·타원 (Shift = 정원)'), combos: [plain('o')] },
-  { id: 'toolLine', group: GS.tool, description: msg('선 (끌기 = 직선, 클릭마다 꺾기, 두 번 클릭·Enter = 끝)'), combos: [plain('l')] },
+  { id: 'toolLine', group: GS.tool, description: msg('선 (끌기 = 직선, 클릭마다 꺾기, 두 번 클릭·Enter = 끝, 시작점 누르기 = 닫힌 도형)'), combos: [plain('l')] },
   { id: 'toolText', group: GS.tool, description: msg('글상자'), combos: [plain('t')] },
   { id: 'finishLine', group: GS.tool, description: msg('그리던 꺾은선 끝내기'), combos: [{ key: 'enter' }] },
   { id: 'escape', group: GS.tool, description: msg('그리기 취소 → 선택 해제'), combos: [{ key: 'escape' }] },

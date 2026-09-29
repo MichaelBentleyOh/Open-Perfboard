@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import { PIN_ELECTRICALS, SYMBOL_SIDES, type Connector, type Drawing, type Pin, type PinElectrical, type Shape, type SymbolPin, type SymbolSide, type TextAlign } from '@core/model'
+import { SYMBOL_TEMPLATES, TEMPLATE_GROUPS, applyTemplate, type SymbolTemplate } from '@core/symbolTemplates'
+import { SymbolThumb } from './SymbolThumb'
 import { PIN_ELECTRICAL_LABEL, SYMBOL_PIN_LENGTH, autoSymbol, fitSymbol, freeSpot, missingPins, overlappingPins, pinLabel, placePin } from '@core/symbol'
 import {
   alignShapes,
@@ -49,14 +51,15 @@ interface Snapshot {
 /** 작업실 안 복사한 도형 (다른 부품 그림에 붙여넣기 가능) */
 let clipboard: Shape[] = []
 
-const TOOLS: { id: DrawTool; label: string; key: string }[] = [
+const TOOLS: { id: DrawTool; label: string; key?: string }[] = [
   { id: 'select', label: '↖', key: 'V' },
   { id: 'rect', label: '▭', key: 'R' },
   { id: 'ellipse', label: '◯', key: 'O' },
+  { id: 'triangle', label: '△' },
   { id: 'line', label: '╱', key: 'L' },
   { id: 'text', label: 'T', key: 'T' }
 ]
-const TOOL_NAMES: Record<DrawTool, string> = { select: msg('선택'), rect: msg('상자'), ellipse: msg('원'), line: msg('선'), text: msg('글상자') }
+const TOOL_NAMES: Record<DrawTool, string> = { select: msg('선택'), rect: msg('상자'), ellipse: msg('원'), triangle: msg('삼각형'), line: msg('선'), text: msg('글상자') }
 const SHAPE_NAMES: Record<Shape['type'], string> = { rect: msg('상자'), ellipse: msg('원'), line: msg('선'), text: msg('글상자'), image: msg('사진') }
 
 const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
@@ -280,7 +283,7 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600, sym
               className={tool === x.id ? 'active' : ''}
               aria-pressed={tool === x.id}
               aria-label={t(TOOL_NAMES[x.id])}
-              title={`${t(TOOL_NAMES[x.id])} (${x.key})`}
+              title={x.key ? `${t(TOOL_NAMES[x.id])} (${x.key})` : t(TOOL_NAMES[x.id])}
               onClick={() => setTool(x.id)}
             >
               {x.label}
@@ -379,6 +382,15 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600, sym
                 setSelectedShapes([])
                 setSelectedPin(pinId)
               }}
+              onTemplate={(tpl) => {
+                const made = applyTemplate(tpl, { name: symbol.partName, pins: [...symbol.partPins], connectors: [...symbol.connectors] }, nanoid)
+                commit(made.drawing, undefined, {
+                  pins: made.pins,
+                  ...(made.showNumbers === false ? { showNumbers: false } : {}),
+                  ...(made.showNames === false ? { showNames: false } : {})
+                })
+                setSelected([])
+              }}
               onRebuild={() => {
                 if (drawing.shapes.length && !window.confirm(t('지금 기호를 지우고 기본 기호로 다시 만들까요?'))) return
                 const auto = autoSymbol({ name: symbol.partName, pins: [...symbol.partPins], connectors: [...symbol.connectors] }, nanoid)
@@ -421,7 +433,7 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600, sym
           ) : (
             <>
               <h4>{one ? t(SHAPE_NAMES[one.type]) : t('도형 {n}개', { n: sel.length })}</h4>
-              {has(['rect', 'ellipse']) && (
+              {sel.length > 0 && sel.every((s) => s.type === 'rect' || s.type === 'ellipse' || (s.type === 'line' && s.closed)) && (
                 <ColorRow label={t('채우기')} value={colorOf('fill')} onChange={(v) => patch({ fill: v })} allowNone />
               )}
               {has(['rect', 'ellipse', 'line']) && (
@@ -441,8 +453,17 @@ export function DrawingPanel({ drawing, pins, onChange, maxImageSide = 1600, sym
                 <div className="field">
                   <span>{t('선 모양')}</span>
                   <span className="check-row">
-                    <CheckBox label={t('시작 화살표')} value={one?.type === 'line' && !!one.arrowStart} onChange={(v) => patch({ arrowStart: v || undefined })} />
-                    <CheckBox label={t('끝 화살표')} value={one?.type === 'line' && !!one.arrowEnd} onChange={(v) => patch({ arrowEnd: v || undefined })} />
+                    <CheckBox
+                      label={t('닫기 (다각형)')}
+                      value={one?.type === 'line' && !!one.closed}
+                      onChange={(v) => patch({ closed: v || undefined, ...(v ? { arrowStart: undefined, arrowEnd: undefined } : { fill: undefined }) })}
+                    />
+                    {!(one?.type === 'line' && one.closed) && (
+                      <>
+                        <CheckBox label={t('시작 화살표')} value={one?.type === 'line' && !!one.arrowStart} onChange={(v) => patch({ arrowStart: v || undefined })} />
+                        <CheckBox label={t('끝 화살표')} value={one?.type === 'line' && !!one.arrowEnd} onChange={(v) => patch({ arrowEnd: v || undefined })} />
+                      </>
+                    )}
                     <CheckBox label={t('점선')} value={one?.type === 'line' && !!one.dashed} onChange={(v) => patch({ dashed: v || undefined })} />
                   </span>
                 </div>
@@ -679,6 +700,7 @@ function SymbolSection({
   onFit,
   onExtras,
   onPlace,
+  onTemplate,
   onRebuild
 }: {
   symbol: SymbolMode
@@ -689,6 +711,7 @@ function SymbolSection({
   onFit: () => void
   onExtras: (e: SymbolExtras) => void
   onPlace: (pinId: string) => void
+  onTemplate: (tpl: SymbolTemplate) => void
   onRebuild: () => void
 }) {
   const t = useT()
@@ -727,6 +750,22 @@ function SymbolSection({
           })}
         </p>
       )}
+      <h4>{t('기호 모양 고르기')}</h4>
+      <div className="symbol-gallery" role="group" aria-label={t('기호 모양 고르기')}>
+        {TEMPLATE_GROUPS.map((g) => (
+          <div key={g.id}>
+            <span className="symbol-gallery-group">{t(g.name)}</span>
+            <div className="symbol-gallery-items">
+              {SYMBOL_TEMPLATES.filter((x) => x.group === g.id).map((x) => (
+                <button key={x.id} aria-label={t(x.name)} title={t(x.name)} onClick={() => onTemplate(x)}>
+                  <SymbolThumb template={x} />
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="hint">{t('누르면 지금 기호를 바꿉니다 (Ctrl+Z로 되돌리기). 신호 이름(A·K, B·C·E, IN+·OUT…)이 맞는 핀을 그 자리에 놓습니다.')}</p>
       <button onClick={onRebuild}>{t('기본 기호로 다시 만들기')}</button>
       <p className="hint">{t('도형 도구로 몸통을 그리고, 핀을 끌어 자리를 잡으세요. 핀을 누르면 쪽·길이·전기 종류를 바꿀 수 있습니다.')}</p>
     </>

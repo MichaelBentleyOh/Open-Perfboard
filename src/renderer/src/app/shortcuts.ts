@@ -14,6 +14,9 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
   const ui = () => useUiStore.getState()
   const store = () => useProjectStore.getState()
   const instances = () => ui().selection.instances
+  const onSchematic = () => ui().view === 'schematic'
+  /** 회로도 탭에서는 하지 않는 배선도 전용 동작 (복사·붙여넣기·글 상자·크기) */
+  const diagramOnly = (fn: Handler): Handler => () => (onSchematic() ? false : fn())
   const withParts = (fn: (ids: string[]) => void): Handler => () => {
     if (instances().length === 0) return false
     fn(instances())
@@ -36,9 +39,9 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
     pdf: onPdf,
     undo,
     redo,
-    copy,
-    cut,
-    paste,
+    copy: diagramOnly(copy),
+    cut: diagramOnly(cut),
+    paste: diagramOnly(paste),
     selectAll: () => {
       const { instances, wires, junctions = [], notes = [] } = store().project
       ui().select({ instances: instances.map((i) => i.id), wires: wires.map((w) => w.id), junctions: junctions.map((j) => j.id), notes: notes.map((n) => n.id) })
@@ -63,18 +66,19 @@ function handlers(onPdf: () => void): Record<ShortcutId, Handler> {
         ui().clearSelection()
       }
     },
-    rotate: withParts((ids) => store().rotateInstances(ids, 90)),
-    rotateBack: withParts((ids) => store().rotateInstances(ids, -90)),
-    flipH: withParts((ids) => store().flipInstances(ids, 'horizontal')),
-    flipV: withParts((ids) => store().flipInstances(ids, 'vertical')),
-    grow: resize(RESIZE_STEP),
-    shrink: resize(1 / RESIZE_STEP),
+    // 회로도 탭(039)에서는 기호를 돌리고 뒤집는다 (배선도의 부품 자세는 그대로)
+    rotate: withParts((ids) => (onSchematic() ? store().rotateSymbols(ids, 90) : store().rotateInstances(ids, 90))),
+    rotateBack: withParts((ids) => (onSchematic() ? store().rotateSymbols(ids, -90) : store().rotateInstances(ids, -90))),
+    flipH: withParts((ids) => (onSchematic() ? store().mirrorSymbols(ids, 'horizontal') : store().flipInstances(ids, 'horizontal'))),
+    flipV: withParts((ids) => (onSchematic() ? store().mirrorSymbols(ids, 'vertical') : store().flipInstances(ids, 'vertical'))),
+    grow: diagramOnly(resize(RESIZE_STEP)),
+    shrink: diagramOnly(resize(1 / RESIZE_STEP)),
     zoom100: zoom((z) => z.setZoom(1)),
     zoomIn: zoom((z) => z.step(1)),
     zoomOut: zoom((z) => z.step(-1)),
     fit: zoom((z) => z.fit()),
     help: () => ui().setHelpOpen(true),
-    textBox: () => addTextBox(),
+    textBox: diagramOnly(() => addTextBox()),
     search: () => ui().setSearchOpen(true)
   }
 }

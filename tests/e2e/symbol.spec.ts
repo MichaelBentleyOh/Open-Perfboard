@@ -95,3 +95,67 @@ test('회로도 기호: 기본 기호 → 핀 끌기(격자) → 전기 종류 �
     await app.close()
   }
 })
+
+test('기본 회로 기호: 모양 고르기(NPN — 이름으로 자리 맞춤) → 저장, 삼각형 도구 = 닫힌 선', async () => {
+  const userData = makeUserDataDir()
+  // 번호 순서가 E, B, C → 이름을 보고 B 왼쪽, C 위, E 아래
+  seedLibrary(userData, {
+    id: 'bjt',
+    name: '2N3904',
+    connectors: [],
+    pins: [
+      { id: 'e', number: '1', signal: 'E', x: 0.2, y: 0.5 },
+      { id: 'b', number: '2', signal: 'B', x: 0.5, y: 0.5 },
+      { id: 'c', number: '3', signal: 'C', x: 0.8, y: 0.5 }
+    ]
+  })
+  const saved = (): Saved => {
+    const dir = join(userData, 'library')
+    return JSON.parse(readFileSync(join(dir, readdirSync(dir).find((n) => n.startsWith('bjt'))!), 'utf8'))
+  }
+  const { app, win } = await launchApp(userData, { home: true })
+  try {
+    await win.locator('.home').getByRole('button', { name: /부품 만들기/ }).click()
+    await win.getByTestId('studio-part-list').getByText('2N3904').click()
+    const editor = win.getByRole('region', { name: '부품 편집' })
+    await editor.getByRole('tab', { name: '⎍ 기호' }).click()
+    const gallery = editor.getByRole('group', { name: '기호 모양 고르기' })
+    await expect(gallery.getByRole('button')).toHaveCount(30)
+    const canvas = editor.getByTestId('drawing-canvas')
+    await gallery.getByRole('button', { name: 'NPN 트랜지스터' }).click()
+    await nextFrame(win)
+    await win.screenshot({ path: 'test-results/symbol-npn.png' })
+    await editor.getByRole('button', { name: '저장' }).click()
+    await expect.poll(() => saved().symbol?.pins.length).toBe(3)
+    const side = (id: string) => saved().symbol.pins.find((p) => p.pinId === id)!.side
+    expect([side('b'), side('c'), side('e')]).toEqual(['left', 'top', 'bottom'])
+    expect(saved().symbol.showNames).toBe(false)
+
+    // 삼각형 도구로 끌어 그리기 → 닫힌 선(채우기)
+    await editor.getByRole('button', { name: '삼각형' }).click()
+    const box = (await canvas.boundingBox())!
+    await win.mouse.move(box.x + 30, box.y + 30)
+    await win.mouse.down()
+    await win.mouse.move(box.x + 60, box.y + 60)
+    await win.mouse.move(box.x + 80, box.y + 80)
+    await win.mouse.up()
+    const props = editor.getByRole('complementary', { name: '도형 속성' })
+    await expect(props.getByRole('checkbox', { name: '닫기 (다각형)' })).toBeChecked()
+    await expect(props.getByText('채우기')).toBeVisible()
+
+    // 꺾은선을 그리다 시작점을 다시 누르면 닫힌 도형
+    await editor.getByRole('button', { name: '선', exact: true }).click()
+    const x0 = box.x + box.width - 120
+    const y0 = box.y + 20
+    await win.mouse.click(x0, y0)
+    await win.mouse.click(x0 + 60, y0)
+    await win.mouse.click(x0 + 30, y0 + 50)
+    await win.mouse.click(x0, y0)
+    await expect(props.getByRole('checkbox', { name: '닫기 (다각형)' })).toBeChecked()
+
+    await editor.getByRole('button', { name: '저장' }).click()
+    await expect.poll(() => saved().symbol.drawing.shapes.filter((s) => s.type === 'line' && s.closed && s.fill).length).toBe(2)
+  } finally {
+    await app.close()
+  }
+})

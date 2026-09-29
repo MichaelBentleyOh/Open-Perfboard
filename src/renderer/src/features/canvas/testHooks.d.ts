@@ -17,5 +17,14 @@ declare global {
       /** 부품 중심의 화면(client) 좌표 */
       instanceClientPosition: (instanceId: string) => ClientPoint | null
     }
+    /** 회로도 (039, SchematicView가 등록) */
+    __opbSchematic?: {
+      worldToClient: (p: ClientPoint) => ClientPoint
+      /** 기호 상자 가운데의 화면 좌표 */
+      symbolClientCenter: (instanceId: string) => ClientPoint | null
+      /** 기호 핀 끝의 화면 좌표 */
+      pinClientPosition: (instanceId: string, pinId: string) => ClientPoint | null
+      counts: () => { symbols: number; wires: number; labels: number }
+    }
   }
 }

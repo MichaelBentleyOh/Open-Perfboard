@@ -91,7 +91,7 @@ export function updateShapes(d: Drawing, ids: readonly string[], patch: Partial<
 const KEYS: Record<Shape['type'], readonly string[]> = {
   rect: ['fill', 'stroke', 'strokeWidth', 'radius'],
   ellipse: ['fill', 'stroke', 'strokeWidth'],
-  line: ['stroke', 'strokeWidth', 'arrowStart', 'arrowEnd', 'dashed'],
+  line: ['stroke', 'strokeWidth', 'arrowStart', 'arrowEnd', 'dashed', 'closed', 'fill'],
   text: ['color', 'fontSize', 'bold', 'align', 'text'],
   image: []
 }

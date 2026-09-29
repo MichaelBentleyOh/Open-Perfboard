@@ -26,7 +26,7 @@ export const SYMBOL_PIN_PITCH = 20
 export const SYMBOL_TEXT = 10
 const MARGIN = 20
 
-type HasPins = Pick<PartDef, 'pins' | 'connectors'>
+export type HasPins = Pick<PartDef, 'pins' | 'connectors'>
 
 export const snapGrid = (v: number) => Math.round(v / SYMBOL_GRID) * SYMBOL_GRID
 const roundUp = (v: number, step = SYMBOL_GRID) => Math.ceil(v / step) * step
@@ -44,8 +44,8 @@ export function textWidth(s: string, size = SYMBOL_TEXT): number {
   return w
 }
 
-const POWER_TOP = /^(\+?\d+(\.\d+)?V\d*|\d+V\d+|V(CC|DD|IN|BAT|BUS|M|S|\+)\d*|3V3|VREF|PWR)$/i
-const POWER_BOTTOM = /^(GND|[ADP]GND|VSS|V-|0V|COM)$/i
+export const POWER_TOP = /^(\+?\d+(\.\d+)?V\d*|\d+V\d+|V(CC|DD|IN|BAT|BUS|M|S|\+)\d*|3V3|VREF|PWR)$/i
+export const POWER_BOTTOM = /^(GND|[ADP]GND|VSS|V-|0V|COM)$/i
 
 /** 핀이 기호 어디에 붙는지 (기본 기호) */
 function autoSide(pin: Pin): 'top' | 'bottom' | undefined {
@@ -63,15 +63,51 @@ export function pinLine(sp: SymbolPin): { x1: number; y1: number; x2: number; y2
   return { x1: sp.x, y1: sp.y, x2: sp.x + dx, y2: sp.y + dy }
 }
 
+/** 기호에 놓는 핀 순서: 커넥터 순 → 번호 순 */
+export function symbolPinOrder(part: HasPins): Pin[] {
+  const connOrder = new Map(part.connectors.map((c, i) => [c.id, i]))
+  return [...part.pins].sort(
+    (a, b) => (connOrder.get(a.connectorId ?? '') ?? 1e9) - (connOrder.get(b.connectorId ?? '') ?? 1e9) || naturalCompare(a.number, b.number)
+  )
+}
+
+export interface PinTextBox {
+  x: number
+  y: number
+  width: number
+  rotation: 0 | -90
+  align: 'left' | 'center' | 'right'
+  offsetY: number
+}
+
+/** 핀 번호(선 옆: 가로 핀은 위, 세로 핀은 왼쪽)와 이름(몸통 안쪽)의 글자 자리. 그림판·회로도가 함께 쓴다 */
+export function pinTextLayout(pin: SymbolPin): { number: PinTextBox; name: PinTextBox } {
+  const { x1, y1, x2, y2 } = pinLine(pin)
+  const vertical = pin.side === 'top' || pin.side === 'bottom'
+  const len = Math.abs(x2 - x1) + Math.abs(y2 - y1)
+  const T = SYMBOL_TEXT
+  const number: PinTextBox = vertical
+    ? { x: x1 - 2, y: Math.max(y1, y2), width: len, rotation: -90, align: 'center', offsetY: T + 1 }
+    : { x: Math.min(x1, x2), y: y1 - T - 2, width: len, rotation: 0, align: 'center', offsetY: 0 }
+  const nameW = 200
+  const name: PinTextBox =
+    pin.side === 'left'
+      ? { x: x2 + 4, y: y2 - T / 2, width: nameW, align: 'left', rotation: 0, offsetY: 0 }
+      : pin.side === 'right'
+        ? { x: x2 - 4 - nameW, y: y2 - T / 2, width: nameW, align: 'right', rotation: 0, offsetY: 0 }
+        : pin.side === 'top'
+          ? // -90° 돌린 글은 아래에서 위로 읽힌다 → 오른쪽 정렬이면 글 끝이 몸통 위 가장자리에 붙는다
+            { x: x2 - T / 2, y: y2 + 4 + nameW, width: nameW, align: 'right', rotation: -90, offsetY: 0 }
+          : { x: x2 - T / 2, y: y2 - 4, width: nameW, align: 'left', rotation: -90, offsetY: 0 }
+  return { number, name }
+}
+
 /**
  * 기본 기호: 사각형 몸통 + 가운데 부품 이름, 핀은 커넥터 순 → 번호 순.
  * 전원(VCC·5V…)은 위, GND는 아래, 나머지는 절반씩 왼쪽·오른쪽. 크기는 신호 이름 길이에 맞춘다
  */
 export function autoSymbol(part: HasPins & { name: string }, makeId: () => string): PartSymbol {
-  const connOrder = new Map(part.connectors.map((c, i) => [c.id, i]))
-  const sorted = [...part.pins].sort(
-    (a, b) => (connOrder.get(a.connectorId ?? '') ?? 1e9) - (connOrder.get(b.connectorId ?? '') ?? 1e9) || naturalCompare(a.number, b.number)
-  )
+  const sorted = symbolPinOrder(part)
   const top = sorted.filter((p) => autoSide(p) === 'top')
   const bottom = sorted.filter((p) => autoSide(p) === 'bottom')
   const rest = sorted.filter((p) => !autoSide(p))

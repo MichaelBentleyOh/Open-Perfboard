@@ -237,6 +237,8 @@ export function StudioScreen() {
             onCancel={s.revert}
             onSave={(p) => s.saveItem('part', p)}
             onDirtyChange={s.setEditorDirty}
+            initialView={s.partView ?? undefined}
+            onViewChange={s.setPartView}
           />
         ) : sel?.kind === 'supply' && (sel.isNew || selectedSupply) ? (
           <SupplyEditor

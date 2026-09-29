@@ -222,6 +222,26 @@ button.brand {
   font-size: 12px;
 }
 /* 기호: 놓지 않은 핀 (038) */
+/* 기호 모양 고르기 (038b) */
+.symbol-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.symbol-gallery-group {
+  font-size: 11px;
+  color: var(--muted);
+}
+.symbol-gallery-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.symbol-gallery-items button {
+  padding: 2px;
+  line-height: 0;
+  color: var(--text);
+}
 .missing-pins {
   list-style: none;
   margin: 0;
@@ -354,8 +374,13 @@ button.brand {
   margin: 0;
   padding: 0;
 }
-.home-recent li button {
-  width: 100%;
+.home-recent li {
+  display: flex;
+  align-items: center;
+}
+.home-recent li button:first-child {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -387,6 +412,28 @@ button.brand {
   background: none;
   color: var(--accent);
   padding: 2px 4px;
+}
+.home-recent button.link.minor {
+  color: var(--muted);
+  margin-right: 8px;
+}
+/* 최근 목록에서 빼기: 줄에 마우스를 올리거나 초점이 오면 보인다 */
+button.recent-remove {
+  flex: none;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 12px;
+  opacity: 0;
+}
+.home-recent li:hover .recent-remove,
+.menu-recent:hover .recent-remove,
+button.recent-remove:focus-visible {
+  opacity: 1;
+}
+button.recent-remove:hover {
+  color: #c62828;
 }
 .home-notice {
   position: absolute;
@@ -1352,6 +1399,14 @@ button.danger:hover {
   color: var(--muted);
   text-decoration: line-through;
 }
+.menu-recent {
+  display: flex;
+  align-items: center;
+}
+.menu-recent button[role='menuitem'] {
+  flex: 1;
+  min-width: 0;
+}
 .menu-items button.menu-minor {
   font-size: 12px;
   color: var(--muted);
@@ -1403,6 +1458,49 @@ button.danger:hover {
   background: var(--bg);
   overflow: auto;
   padding: 16px;
+}
+/* 회로도 (039): 배선도 캔버스 위를 덮는다 */
+.schematic-overlay {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+}
+.schematic-view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: default;
+}
+.schematic-view.wiring {
+  cursor: crosshair;
+}
+.schematic-view.panning {
+  cursor: grab;
+}
+.schematic-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.schematic-toolbar button.active {
+  background: #e3f2fd;
+  border-color: #1e88e5;
+}
+.schematic-empty {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--muted);
 }
 .report {
   background: var(--panel);

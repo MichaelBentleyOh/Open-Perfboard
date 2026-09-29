@@ -25,6 +25,8 @@ export interface ReportOptions {
   landscape: boolean
   /** 배선도 이미지. data:image/png;base64 만 받는다 */
   diagramPng?: string
+  /** 회로도 이미지 (039). data:image/png;base64 만 받는다 */
+  schematicPng?: string
   bom?: BomRow[]
   /** BOM 금액 통화 (029, 기본 원) */
   currency?: Currency
@@ -116,6 +118,14 @@ export function buildReportHtml(o: ReportOptions): string {
       ${titleBlock(t('배선도'))}
       <div class="diagram-box"><img src="${o.diagramPng}" style="max-height:${diagramMaxH}mm" alt="${esc(t('배선도'))}"></div>
       ${notes ? `<div class="notes" style="height:${NOTES_MM - 4}mm"><b>${esc(t('비고'))}</b><p>${esc(notes).replace(/\n/g, '<br>')}</p></div>` : ''}
+    </section>`)
+  }
+
+  if (o.schematicPng !== undefined && isPngDataUrl(o.schematicPng)) {
+    sections.push(`
+    <section class="page diagram">
+      ${titleBlock(t('회로도'))}
+      <div class="diagram-box"><img src="${o.schematicPng}" style="max-height:${diagramMaxH}mm" alt="${esc(t('회로도'))}"></div>
     </section>`)
   }
 

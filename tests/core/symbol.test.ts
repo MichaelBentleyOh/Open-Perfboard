@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PartDef, Pin } from '../../src/core/model'
+import { PROJECT_FILE_VERSION, type PartDef, type Pin } from '../../src/core/model'
 import {
   SYMBOL_GRID,
   autoSymbol,
@@ -88,7 +88,7 @@ describe('회로도 기호 (038)', () => {
     expect(updatePin(p, 'a', { electrical: 'passive' }).pins[0]).not.toHaveProperty('electrical')
   })
 
-  it('파일: 기호·전기 종류가 오가고, 없는 핀·잘못된 값은 거부, v8은 v9로', () => {
+  it('파일: 기호·전기 종류가 오가고, 없는 핀·잘못된 값은 거부, v8은 지금 버전으로', () => {
     const symbol = autoSymbol(part, makeId)
     const full: PartDef = { ...part, symbol: { ...symbol, showNumbers: false }, pins: part.pins.map((p, i) => (i === 0 ? { ...p, electrical: 'power_in' } : p)) }
     const r = parsePart(serializePart(full))
@@ -101,6 +101,6 @@ describe('회로도 기호 (038)', () => {
     const badKind = parsePart(JSON.stringify({ ...full, pins: [{ ...part.pins[0], electrical: 'gpio' }] }))
     expect(badKind.ok).toBe(false)
     const v8 = parseProjectFile(JSON.stringify({ version: 8, name: 'x', parts: { imu: part }, instances: [], wires: [] }))
-    expect(v8.ok && v8.value.project.version).toBe(9)
+    expect(v8.ok && v8.value.project.version).toBe(PROJECT_FILE_VERSION)
   })
 })

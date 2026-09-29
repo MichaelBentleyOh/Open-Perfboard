@@ -13,6 +13,7 @@ import { parseProjectFile, serializeProject } from '@core/serialize'
 import type { Project, Supply } from '@core/model'
 import { supplyUsage } from '@core/supply'
 import { wirePath } from '@core/wire'
+import { buildSchematicScene } from '@core/schematic'
 import { synthProject } from '../perf/synth'
 
 const time = (fn: () => unknown): number => {
@@ -54,6 +55,11 @@ describe('큰 배선도: 전선 수에 비례해서만 느려진다', () => {
     const paths = (p: Project) =>
       p.wires.map((w) => ({ id: w.id, path: wirePath(endPosition(p, w.from)!, w.points, endPosition(p, w.to)!, w.orthogonal) }))
     expect(growth(1000, (p) => { const g = paths(p); return () => findCrossings(g) })).toBeLessThan(LINEAR_ENOUGH)
+  })
+
+  it('회로도 장면 (자동 배치·핀·선·넷 라벨, 039)', () => {
+    const labeled = (p: Project): Project => ({ ...p, schematic: { labeled: p.wires.filter((_, i) => i % 2).map((w) => w.id) } })
+    expect(growth(1000, (p) => { const q = labeled(p); return () => buildSchematicScene(q) })).toBeLessThan(LINEAR_ENOUGH)
   })
 
   it('화면 전선 모양 전체 (경로 + 점프)', () => {

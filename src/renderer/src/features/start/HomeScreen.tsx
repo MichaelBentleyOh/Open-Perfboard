@@ -95,9 +95,16 @@ export function HomeScreen() {
         <section className="home-recent" aria-label={t('최근 배선도')}>
           <div className="home-recent-head">
             <h2>{t('최근 배선도')}</h2>
-            <button className="link" onClick={() => openDocument()}>
-              {t('배선도 열기…')}
-            </button>
+            <span>
+              {recent.length > 0 && (
+                <button className="link minor" onClick={() => window.api.recent.clear().then(loadRecent)}>
+                  {t('목록 지우기')}
+                </button>
+              )}
+              <button className="link" onClick={() => openDocument()}>
+                {t('배선도 열기…')}
+              </button>
+            </span>
           </div>
           {recent.length === 0 ? (
             <p className="muted">{t('최근에 연 배선도가 없습니다')}</p>
@@ -112,6 +119,14 @@ export function HomeScreen() {
                   >
                     <strong>{documentName(r.path)}</strong>
                     <span className="menu-path">{r.path.replace(/[\\/][^\\/]*$/, '')}</span>
+                  </button>
+                  <button
+                    className="recent-remove"
+                    aria-label={t('목록에서 빼기: {name}', { name: documentName(r.path) })}
+                    title={t('목록에서 빼기 (파일은 지우지 않음)')}
+                    onClick={() => window.api.recent.remove(r.path).then(loadRecent)}
+                  >
+                    ✕
                   </button>
                 </li>
               ))}

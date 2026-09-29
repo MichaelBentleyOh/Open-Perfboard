@@ -2,17 +2,19 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import type { Drawing, Pin, Shape, SymbolPin } from '@core/model'
-import { shapesInBox, updateShape } from '@core/drawing'
-import { pinLine, SYMBOL_GRID, SYMBOL_TEXT } from '@core/symbol'
+import { shapeBounds, shapesInBox, updateShape } from '@core/drawing'
+import { pinLine, pinTextLayout, SYMBOL_GRID, SYMBOL_TEXT } from '@core/symbol'
 import { ellipseConfig, imageConfig, lineConfig, loadDrawingImages, rectConfig, textConfig } from './shapeNodes'
 import { useT } from '@/i18n'
 
-export type DrawTool = 'select' | 'rect' | 'ellipse' | 'line' | 'text'
+export type DrawTool = 'select' | 'rect' | 'ellipse' | 'triangle' | 'line' | 'text'
 
 /** 그림판 둘레 여백 (화면 px) */
 const PAD = 32
 /** 이만큼 안 움직였으면 끌기가 아니라 클릭 */
 const CLICK_PX = 4
+/** 꺾은선을 그리다 시작점을 이만큼(화면 px) 가까이 누르면 닫는다 */
+const CLOSE_PX = 8
 const GRID = 10
 
 interface Point {
@@ -81,23 +83,8 @@ const SymbolPinView = memo(function SymbolPinView({
 }) {
   const { x1, y1, x2, y2 } = pinLine(pin)
   const color = selected ? PIN_SELECTED : PIN_COLOR
-  const vertical = pin.side === 'top' || pin.side === 'bottom'
-  const len = Math.abs(x2 - x1) + Math.abs(y2 - y1)
   const T = SYMBOL_TEXT
-  // 번호: 선 옆(가로 핀은 위, 세로 핀은 왼쪽), 이름: 몸통 안쪽
-  const number = vertical
-    ? { x: x1 - 2, y: Math.max(y1, y2), width: len, rotation: -90, align: 'center' as const, offsetY: T + 1 }
-    : { x: Math.min(x1, x2), y: y1 - T - 2, width: len, rotation: 0, align: 'center' as const, offsetY: 0 }
-  const nameW = 200
-  const name =
-    pin.side === 'left'
-      ? { x: x2 + 4, y: y2 - T / 2, width: nameW, align: 'left' as const, rotation: 0 }
-      : pin.side === 'right'
-        ? { x: x2 - 4 - nameW, y: y2 - T / 2, width: nameW, align: 'right' as const, rotation: 0 }
-        : pin.side === 'top'
-          ? // -90° 돌린 글은 아래에서 위로 읽힌다 → 오른쪽 정렬이면 글 끝이 몸통 위 가장자리에 붙는다
-            { x: x2 - T / 2, y: y2 + 4 + nameW, width: nameW, align: 'right' as const, rotation: -90 }
-          : { x: x2 - T / 2, y: y2 - 4, width: nameW, align: 'left' as const, rotation: -90 }
+  const { number, name } = pinTextLayout(pin)
   return (
     <Group
       name="symbol-pin"
@@ -154,17 +141,33 @@ function snapAngle(from: Point, to: Point): Point {
 const DEFAULT_FILL = '#e0e0e0'
 const DEFAULT_STROKE = '#424242'
 
-/** 새 상자·원 (시작점 a, 끝점 b) */
-function boxShape(type: 'rect' | 'ellipse', id: string, a: Point, b: Point, square: boolean): Shape {
+type BoxTool = 'rect' | 'ellipse' | 'triangle'
+const isBoxTool = (t: DrawTool): t is BoxTool => t === 'rect' || t === 'ellipse' || t === 'triangle'
+/** 클릭만 했을 때의 기본 크기 */
+const BOX_DEFAULT: Record<BoxTool, Point> = { rect: { x: 100, y: 60 }, ellipse: { x: 80, y: 80 }, triangle: { x: 80, y: 70 } }
+
+/** 새 상자·원·삼각형 (시작점 a, 끝점 b). 삼각형은 닫힌 선 (꼭짓점 위 가운데) */
+function boxShape(type: BoxTool, id: string, a: Point, b: Point, square: boolean): Shape {
   let w = Math.abs(b.x - a.x)
   let h = Math.abs(b.y - a.y)
   if (square) w = h = Math.max(w, h)
-  const x = b.x < a.x ? a.x - w : a.x
-  const y = b.y < a.y ? a.y - h : a.y
-  return { id, type, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), fill: DEFAULT_FILL, stroke: DEFAULT_STROKE, strokeWidth: 2 }
+  const x = Math.round(b.x < a.x ? a.x - w : a.x)
+  const y = Math.round(b.y < a.y ? a.y - h : a.y)
+  w = Math.round(w)
+  h = Math.round(h)
+  if (type === 'triangle') {
+    return { id, type: 'line', x, y, points: [Math.round(w / 2), 0, w, h, 0, h], closed: true, fill: DEFAULT_FILL, stroke: DEFAULT_STROKE, strokeWidth: 2 }
+  }
+  return { id, type, x, y, w, h, fill: DEFAULT_FILL, stroke: DEFAULT_STROKE, strokeWidth: 2 }
 }
 
-function lineShape(id: string, pts: readonly Point[]): Shape {
+/** 크기가 0인 도형 (그리지 않는다) */
+function isEmpty(s: Shape): boolean {
+  const b = shapeBounds(s)
+  return b.width < 1 || b.height < 1
+}
+
+function lineShape(id: string, pts: readonly Point[], closed: boolean): Shape {
   const o = pts[0]!
   return {
     id,
@@ -173,7 +176,8 @@ function lineShape(id: string, pts: readonly Point[]): Shape {
     y: Math.round(o.y),
     points: pts.flatMap((p) => [Math.round(p.x - o.x), Math.round(p.y - o.y)]),
     stroke: DEFAULT_STROKE,
-    strokeWidth: 3
+    strokeWidth: 3,
+    ...(closed ? { closed: true, fill: DEFAULT_FILL } : {})
   }
 }
 
@@ -299,12 +303,12 @@ export function DrawingCanvas(p: Props) {
   }, [p.selected, p.tool, d])
 
   // 꺾은선 끝내기 (Enter) / 취소 (Esc)
-  const finishLine = () => {
+  const finishLine = (closed = false) => {
     const pts = lineRef.current
     setLinePts(null)
     setHover(null)
     if (!pts || pts.length < 2) return
-    const shape = lineShape(props.current.makeId(), pts)
+    const shape = lineShape(props.current.makeId(), pts, closed && pts.length >= 3)
     props.current.onCommit({ ...props.current.drawing, shapes: [...props.current.drawing.shapes, shape] })
     props.current.onSelect([shape.id])
     props.current.onToolDone()
@@ -354,6 +358,7 @@ export function DrawingCanvas(p: Props) {
         return
       case 'rect':
       case 'ellipse':
+      case 'triangle':
         gesture.current = { kind: 'create', start: at, screen }
         setPreview(boxShape(cur.tool, 'preview', at, at, false))
         return
@@ -372,6 +377,13 @@ export function DrawingCanvas(p: Props) {
           gesture.current = { kind: 'line', start: at, screen }
           setLinePts([at])
         } else {
+          // 점이 셋 이상일 때 시작점을 누르면(격자에 붙은 같은 점이거나 화면에서 가까우면) 닫힌 다각형으로 끝
+          const first = pts[0]!
+          const onFirst = (at.x === first.x && at.y === first.y) || Math.hypot(b.x - first.x, b.y - first.y) * viewRef.current.scale <= CLOSE_PX
+          if (pts.length >= 3 && onFirst) {
+            finishLine(true)
+            return
+          }
           const last = pts[pts.length - 1]!
           const next = e.evt.shiftKey ? snapAngle(last, at) : at
           setLinePts([...pts, next])
@@ -393,7 +405,7 @@ export function DrawingCanvas(p: Props) {
     }
     if (!g) return
     if (g.kind === 'marquee') setMarquee({ a: g.start, b })
-    else if (g.kind === 'create' && (cur.tool === 'rect' || cur.tool === 'ellipse')) setPreview(boxShape(cur.tool, 'preview', g.start, at, e.evt.shiftKey))
+    else if (g.kind === 'create' && isBoxTool(cur.tool)) setPreview(boxShape(cur.tool, 'preview', g.start, at, e.evt.shiftKey))
   }
 
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -416,12 +428,13 @@ export function DrawingCanvas(p: Props) {
       cur.onSelect(shift ? [...new Set([...cur.selected, ...inside])] : inside)
       return
     }
-    if (g.kind === 'create' && (cur.tool === 'rect' || cur.tool === 'ellipse')) {
+    if (g.kind === 'create' && isBoxTool(cur.tool)) {
       setPreview(null)
       // 클릭만 했으면 기본 크기
-      const end = moved ? at : { x: g.start.x + (cur.tool === 'rect' ? 100 : 80), y: g.start.y + (cur.tool === 'rect' ? 60 : 80) }
+      const size = BOX_DEFAULT[cur.tool]
+      const end = moved ? at : { x: g.start.x + size.x, y: g.start.y + size.y }
       const shape = boxShape(cur.tool, cur.makeId(), g.start, end, moved && e.evt.shiftKey)
-      if ((shape.type === 'rect' || shape.type === 'ellipse') && (shape.w < 1 || shape.h < 1)) return
+      if (isEmpty(shape)) return
       cur.onCommit({ ...cur.drawing, shapes: [...cur.drawing.shapes, shape] })
       cur.onSelect([shape.id])
       cur.onToolDone()
@@ -438,10 +451,12 @@ export function DrawingCanvas(p: Props) {
   const onDblClick = () => {
     const pts = lineRef.current
     if (!pts) return
-    // 두 번 클릭하면 같은 자리 점이 하나 더 찍혔다 → 빼고 끝낸다
+    // 두 번 클릭하면 같은 자리 점이 하나 더 찍혔다 → 빼고 끝낸다.
+    // 다른 자리를 빠르게 누른 것도 Konva는 두 번 클릭으로 알린다 → 그때는 꺾는 점으로 두고 계속 그린다
     const last = pts[pts.length - 1]!
     const prev = pts[pts.length - 2]
-    if (prev && Math.hypot(last.x - prev.x, last.y - prev.y) < 1) lineRef.current = pts.slice(0, -1)
+    if (!prev || Math.hypot(last.x - prev.x, last.y - prev.y) * viewRef.current.scale > CLOSE_PX) return
+    lineRef.current = pts.slice(0, -1)
     finishLine()
   }
 
@@ -590,7 +605,14 @@ export function DrawingCanvas(p: Props) {
             {p.pins.map((pin) => (
               <Circle key={pin.id} x={pin.x * d.width} y={pin.y * d.height} radius={pinR} fill="#e53935" stroke="#fff" strokeWidth={1.5 / view.scale} opacity={0.85} listening={false} />
             ))}
-            {preview && (preview.type === 'rect' ? <Rect {...rectConfig(preview)} listening={false} opacity={0.7} /> : preview.type === 'ellipse' ? <Ellipse {...ellipseConfig(preview)} listening={false} opacity={0.7} /> : null)}
+            {preview &&
+              (preview.type === 'rect' ? (
+                <Rect {...rectConfig(preview)} listening={false} opacity={0.7} />
+              ) : preview.type === 'ellipse' ? (
+                <Ellipse {...ellipseConfig(preview)} listening={false} opacity={0.7} />
+              ) : preview.type === 'line' ? (
+                <Arrow {...lineConfig(preview)} listening={false} opacity={0.7} />
+              ) : null)}
             {linePreview && linePreview.length > 0 && (
               <Line points={linePreview.flatMap((q) => [q.x, q.y])} stroke={DEFAULT_STROKE} strokeWidth={3} dash={[6, 4]} lineCap="round" listening={false} />
             )}

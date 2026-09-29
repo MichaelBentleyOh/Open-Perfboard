@@ -1,7 +1,7 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
-/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) · v9: 회로도 기호·핀 전기 종류 (038) */
-export const PROJECT_FILE_VERSION = 9
+/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) · v9: 회로도 기호·핀 전기 종류 (038) · v10: 배선도마다 회로도 (039) */
+export const PROJECT_FILE_VERSION = 10
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -43,7 +43,7 @@ export interface EllipseShape extends ShapeBase {
   stroke?: string
   strokeWidth?: number
 }
-/** 선: points는 (x, y) 기준 상대 좌표 [x0, y0, x1, y1, …] (꺾은선) */
+/** 선: points는 (x, y) 기준 상대 좌표 [x0, y0, x1, y1, …] (꺾은선). closed면 다각형 (삼각형 등, 채우기 가능, 화살표 없음) */
 export interface LineShape extends ShapeBase {
   type: 'line'
   points: number[]
@@ -52,6 +52,8 @@ export interface LineShape extends ShapeBase {
   arrowStart?: boolean
   arrowEnd?: boolean
   dashed?: boolean
+  closed?: boolean
+  fill?: string
 }
 export type TextAlign = 'left' | 'center' | 'right'
 export interface TextShape extends ShapeBase {
@@ -275,6 +277,28 @@ export interface Project {
   bom?: ProjectBom
   /** 쓰인 부속 부품 사본 (027): 전선 종류·수축 튜브, BOM에 넣은 하우징·단자. 파일 단독으로 열리게 */
   supplies?: Record<string, Supply>
+  /** 회로도 (039): 기호 자리만. 연결은 wires를 함께 쓴다 */
+  schematic?: Schematic
+}
+
+export type SchRotation = 0 | 90 | 180 | 270
+export const SCH_ROTATIONS: readonly SchRotation[] = [0, 90, 180, 270]
+
+/** 회로도의 기호 자리. (x, y) = 기호 몸통 가운데(격자에 맞춘 점)가 오는 곳, 좌표 1 = 5 mil. 반전은 회전보다 먼저 */
+export interface SchPlacement {
+  x: number
+  y: number
+  rotation?: SchRotation
+  mirror?: boolean
+}
+
+export interface Schematic {
+  /** 부품 인스턴스 id → 기호 자리. 없는 부품은 자동 배치 */
+  symbols?: Record<string, SchPlacement>
+  /** 접속점 id → 회로도 자리. 없으면 이어진 핀들의 가운데 */
+  junctions?: Record<string, { x: number; y: number }>
+  /** 선 대신 넷 이름 라벨로 보이는 전선 id */
+  labeled?: string[]
 }
 
 /** 배선도 부품 행의 수정값 */

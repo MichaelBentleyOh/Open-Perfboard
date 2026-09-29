@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import logoUrl from '@/assets/logo.svg'
 import { CanvasView } from '@/features/canvas/CanvasView'
+import { SchematicView } from '@/features/schematic/SchematicView'
 import { ZoomInput } from '@/features/canvas/ZoomInput'
 import { HelpDialog } from '@/features/help/HelpDialog'
 import { BusyOverlay } from '@/components/BusyOverlay'
@@ -18,7 +19,7 @@ import { BomEditor } from '@/features/reports/BomEditor'
 import { PdfDialog, type PdfDialogValue } from '@/features/export/PdfDialog'
 import { redo, undo, useProjectStore } from '@/stores/projectStore'
 import { documentName, useDocumentStore, useIsDirty } from '@/stores/documentStore'
-import { useUiStore } from '@/stores/uiStore'
+import { useUiStore, type MainView } from '@/stores/uiStore'
 import { useLocaleStore, useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -27,6 +28,7 @@ import {
   exportNetlistCsv,
   exportPdf,
   exportPng,
+  exportSchematicPng,
   newDocument,
   openDocument,
   openRecent,
@@ -35,15 +37,15 @@ import {
 import { tidyWiring } from './editCommands'
 import { useCanvasShortcuts } from './shortcuts'
 
-type BottomTab = 'diagram' | 'bom' | 'netlist'
-
 export default function App() {
   const t = useT()
   const { locale, setLocale } = useLocaleStore()
   const embedAttachments = useSettingsStore((s) => s.embedAttachments)
   const leftCollapsed = useSettingsStore((s) => s.leftCollapsed)
   const rightCollapsed = useSettingsStore((s) => s.rightCollapsed)
-  const [tab, setTab] = useState<BottomTab>('diagram')
+  const tab = useUiStore((s) => s.view)
+  const setTab = useUiStore.getState().setView
+  const [schZoom, setSchZoom] = useState(1)
   const searchOpen = useUiStore((s) => s.searchOpen)
   const [zoom, setZoom] = useState(1)
   const project = useProjectStore((s) => s.project)
@@ -59,7 +61,7 @@ export default function App() {
   const [pdfPrefs, setPdfPrefs] = useState<Pick<PdfDialogValue, 'paper' | 'landscape' | 'include'>>({
     paper: 'A4',
     landscape: true,
-    include: { diagram: true, bom: true, netlist: true }
+    include: { diagram: true, schematic: true, bom: true, netlist: true }
   })
   const openPdf = () => {
     exportMenu.current?.removeAttribute('open')
@@ -89,8 +91,9 @@ export default function App() {
   const scope = useWorkspaceStore((s) => s.scope)
   const inScope = scopedSheets(sheets, scope)
   const count = (fn: (p: Project) => number) => inScope.reduce((n, s) => n + fn(s.project), 0)
-  const tabs: { id: BottomTab; label: string }[] = [
+  const tabs: { id: MainView; label: string }[] = [
     { id: 'diagram', label: t('배선도') },
+    { id: 'schematic', label: t('회로도') },
     { id: 'bom', label: `BOM (${count((p) => p.instances.length + (p.bom?.items?.length ?? 0))})` },
     { id: 'netlist', label: t('결선표 ({n})', { n: count((p) => p.wires.length) }) }
   ]
@@ -211,16 +214,26 @@ export default function App() {
               <span className="menu-heading">{t('최근 파일')}</span>
               {recent.length === 0 && <span className="menu-empty">{t('없음')}</span>}
               {recent.map((r) => (
-                <button
-                  key={r.path}
-                  role="menuitem"
-                  className={r.exists ? '' : 'missing'}
-                  title={r.exists ? r.path : t('파일을 찾을 수 없습니다: {path}', { path: r.path })}
-                  onClick={runFile(() => openRecent(r.path))}
-                >
-                  {documentName(r.path)}
-                  <span className="menu-path">{r.path.replace(/[\\/][^\\/]*$/, '')}</span>
-                </button>
+                <div key={r.path} className="menu-recent">
+                  <button
+                    role="menuitem"
+                    className={r.exists ? '' : 'missing'}
+                    title={r.exists ? r.path : t('파일을 찾을 수 없습니다: {path}', { path: r.path })}
+                    onClick={runFile(() => openRecent(r.path))}
+                  >
+                    {documentName(r.path)}
+                    <span className="menu-path">{r.path.replace(/[\\/][^\\/]*$/, '')}</span>
+                  </button>
+                  {/* 메뉴는 열어 둔 채 목록만 다시 읽는다 */}
+                  <button
+                    className="recent-remove"
+                    aria-label={t('목록에서 빼기: {name}', { name: documentName(r.path) })}
+                    title={t('목록에서 빼기 (파일은 지우지 않음)')}
+                    onClick={() => window.api.recent.remove(r.path).then(loadRecent)}
+                  >
+                    ✕
+                  </button>
+                </div>
               ))}
               {recent.length > 0 && (
                 <button role="menuitem" className="menu-minor" onClick={runFile(() => window.api.recent.clear())}>
@@ -244,6 +257,9 @@ export default function App() {
             </button>
             <button role="menuitem" onClick={runExport(exportPng)}>
               {t('배선도 이미지 (PNG)')}
+            </button>
+            <button role="menuitem" onClick={runExport(exportSchematicPng)}>
+              {t('회로도 이미지 (PNG)')}
             </button>
             <button role="menuitem" onClick={openPdf} title="Ctrl+P">
               {t('PDF (배선도·BOM·결선표)…')}
@@ -287,15 +303,24 @@ export default function App() {
         <div className="view">
           {/* 캔버스는 탭과 무관하게 유지한다 (화면 위치 유지, 언제든 PNG 내보내기) */}
           <CanvasView onZoomChange={setZoom} />
-          {tab !== 'diagram' && (
+          {tab === 'schematic' && (
+            <div className="schematic-overlay">
+              <SchematicView onZoomChange={setSchZoom} />
+            </div>
+          )}
+          {(tab === 'bom' || tab === 'netlist') && (
             <div className="report-overlay">
               {tab === 'bom' ? <BomEditor onExportCsv={exportBomCsv} onExportXlsx={exportBomXlsx} /> : <NetlistView onExport={exportNetlistCsv} />}
             </div>
           )}
-          {(notice || (tab === 'diagram' && (wireStart || tool === 'wire'))) && (
+          {(notice || ((tab === 'diagram' || tab === 'schematic') && (wireStart || tool === 'wire'))) && (
             <div className="canvas-status" role="status">
               {notice ??
-                (wireStart
+                (tab === 'schematic'
+                  ? wireStart
+                    ? t('이을 핀을 누르세요 · Esc 취소')
+                    : t('회로도 배선 모드 · 핀을 눌러 시작 → 다른 핀을 누르면 배선도에도 전선이 생깁니다 · Esc = 선택 모드')
+                  : wireStart
                   ? [
                       t('연결할 핀을 클릭하세요 · 빈 곳 클릭 = 꺾기'),
                       ...(wirePoints.length ? [`(${wirePoints.length})`, t('Backspace 되돌리기')] : []),
@@ -308,6 +333,11 @@ export default function App() {
             <div className="zoom-float">
               <GridSnapControl />
               <ZoomInput zoom={zoom} />
+            </div>
+          )}
+          {tab === 'schematic' && (
+            <div className="zoom-float">
+              <ZoomInput zoom={schZoom} />
             </div>
           )}
           {searchOpen && <SearchBox onShowDiagram={() => setTab('diagram')} />}

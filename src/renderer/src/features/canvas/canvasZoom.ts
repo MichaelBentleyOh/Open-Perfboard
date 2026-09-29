@@ -1,3 +1,5 @@
+import { useUiStore } from '@/stores/uiStore'
+
 // 캔버스 배율 조작 (입력칸·단축키에서 호출). CanvasView가 구현을 등록한다.
 export interface CanvasZoom {
   /** 캔버스 가운데를 기준으로 배율을 정한다 (범위 밖이면 맞춰짐) */
@@ -12,10 +14,12 @@ export interface CanvasZoom {
   centerOn: (p: { x: number; y: number }) => void
 }
 
-let current: CanvasZoom | null = null
+/** 배선도 캔버스와 회로도(039)가 따로 등록한다. 단축키·배율 칸은 지금 보기의 것을 쓴다 */
+export type ZoomSlot = 'diagram' | 'schematic'
+const slots: Record<ZoomSlot, CanvasZoom | null> = { diagram: null, schematic: null }
 
-export function registerCanvasZoom(z: CanvasZoom | null): void {
-  current = z
+export function registerCanvasZoom(z: CanvasZoom | null, slot: ZoomSlot = 'diagram'): void {
+  slots[slot] = z
 }
 
-export const canvasZoom = (): CanvasZoom | null => current
+export const canvasZoom = (): CanvasZoom | null => slots[useUiStore.getState().view === 'schematic' ? 'schematic' : 'diagram']

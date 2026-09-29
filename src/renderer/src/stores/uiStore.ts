@@ -62,6 +62,8 @@ export interface BusyTask {
 export type Tool = 'select' | 'wire'
 export type NetlistMode = 'table' | 'labels'
 export type Screen = 'splash' | 'home' | 'diagram' | 'studio'
+/** 배선도 화면 가운데 보기 (039: 회로도) */
+export type MainView = 'diagram' | 'schematic' | 'bom' | 'netlist'
 
 interface UiState {
   tool: Tool
@@ -121,6 +123,9 @@ interface UiState {
   /** 지금 보이는 화면: 로딩 → 홈 → 배선도 (036) / 부품 작업실 (037a) */
   screen: Screen
   setScreen: (screen: Screen) => void
+  /** 배선도 / 회로도 / BOM / 결선표. 바꾸면 그리던 전선은 취소 */
+  view: MainView
+  setView: (view: MainView) => void
   busy: BusyTask | null
   setBusy: (task: BusyTask | null) => void
   setBusyProgress: (done: number, total: number) => void
@@ -180,6 +185,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   setAppVersion: (appVersion) => set({ appVersion }),
   screen: 'splash',
   setScreen: (screen) => set({ screen }),
+  view: 'diagram',
+  setView: (view) => set({ view, wireStart: null, wirePoints: [] }),
   busy: null,
   setBusy: (busy) => set({ busy }),
   setBusyProgress: (done, total) => {

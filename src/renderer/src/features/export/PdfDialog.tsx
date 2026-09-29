@@ -8,7 +8,7 @@ export interface PdfDialogValue {
   notes: string
   paper: PaperSize
   landscape: boolean
-  include: { diagram: boolean; bom: boolean; netlist: boolean }
+  include: { diagram: boolean; schematic: boolean; bom: boolean; netlist: boolean }
 }
 
 interface Props {
@@ -24,7 +24,7 @@ export function PdfDialog({ initial, onCancel, onExport }: Props) {
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof PdfDialogValue>(k: K, value: PdfDialogValue[K]) => setV((o) => ({ ...o, [k]: value }))
   const include = (k: keyof PdfDialogValue['include'], on: boolean) => setV((o) => ({ ...o, include: { ...o.include, [k]: on } }))
-  const nothing = !v.include.diagram && !v.include.bom && !v.include.netlist
+  const nothing = !v.include.diagram && !v.include.schematic && !v.include.bom && !v.include.netlist
 
   return (
     <div className="modal-backdrop">
@@ -65,6 +65,9 @@ export function PdfDialog({ initial, onCancel, onExport }: Props) {
             <div className="choice-row">
               <label>
                 <input type="checkbox" checked={v.include.diagram} onChange={(e) => include('diagram', e.target.checked)} /> {t('배선도')}
+              </label>
+              <label>
+                <input type="checkbox" checked={v.include.schematic} onChange={(e) => include('schematic', e.target.checked)} /> {t('회로도')}
               </label>
               <label>
                 <input type="checkbox" checked={v.include.bom} onChange={(e) => include('bom', e.target.checked)} /> BOM

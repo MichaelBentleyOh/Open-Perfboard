@@ -35,15 +35,17 @@ export const lineConfig = (s: Extract<Shape, { type: 'line' }>): Konva.ArrowConf
   ...common(s),
   points: s.points,
   stroke: s.stroke,
-  fill: s.stroke,
+  // 열린 선의 fill은 화살표 머리 색, 닫힌 선(다각형)은 채우기
+  fill: s.closed ? s.fill : s.stroke,
+  closed: !!s.closed,
   strokeWidth: s.strokeWidth,
   lineCap: 'round',
   lineJoin: 'round',
   dash: s.dashed ? [s.strokeWidth * 3, s.strokeWidth * 2] : undefined,
-  pointerAtBeginning: !!s.arrowStart,
-  pointerAtEnding: !!s.arrowEnd,
-  pointerLength: Math.max(6, s.strokeWidth * 3),
-  pointerWidth: Math.max(6, s.strokeWidth * 3),
+  pointerAtBeginning: !s.closed && !!s.arrowStart,
+  pointerAtEnding: !s.closed && !!s.arrowEnd,
+  pointerLength: Math.max(4, s.strokeWidth * 3),
+  pointerWidth: Math.max(4, s.strokeWidth * 3),
   hitStrokeWidth: Math.max(12, s.strokeWidth + 8)
 })
 

@@ -23,6 +23,7 @@ import { routeAll, type RouteObstacle, type RouteOptions, type RouteRequest } fr
 import { convertMoney, inProjectCurrency, projectCurrency, withCurrency } from './money'
 import { pruneSupplies } from './supply'
 import { moveNotes, removeNotes, resizeNotes } from './note'
+import { pruneSchematic } from './schematic'
 
 export { resolvePin } from './ends'
 
@@ -318,7 +319,7 @@ export function removeItems(project: Project, items: ItemIds): Project {
   }
   if (jset.size > 0 && next.junctions) next = withJunctions(next, next.junctions.filter((j) => !jset.has(j.id)))
   for (const id of items.instances) next = removeInstance(next, id)
-  return pruneSupplies(cleanupJunctions(removeNotes(next, items.notes ?? [])))
+  return pruneSchematic(pruneSupplies(cleanupJunctions(removeNotes(next, items.notes ?? []))))
 }
 
 export function updateWires(project: Project, ids: readonly string[], patch: WirePatch): Project {
@@ -340,7 +341,7 @@ export function replacePartDef(project: Project, source: PartDef): { project: Pr
   const dangling = (r: WireEnd) => isPinEnd(r) && usesPart.has(r.instanceId) && !pinIds.has(r.pinId)
   const wires = project.wires.filter((w) => !dangling(w.from) && !dangling(w.to))
   return {
-    project: cleanupJunctions({ ...project, parts: { ...project.parts, [part.id]: part }, wires }),
+    project: pruneSchematic(cleanupJunctions({ ...project, parts: { ...project.parts, [part.id]: part }, wires })),
     removedWires: project.wires.length - wires.length
   }
 }

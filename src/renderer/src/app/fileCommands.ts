@@ -1,6 +1,7 @@
 // 파일 메뉴 명령: 새로 만들기, 열기, 저장, 내보내기.
 // 흐름: core로 직렬화/검증 → window.api로 파일 I/O → 스토어 갱신
 import type { PartDef, Supply } from '@core/model'
+import { renderSchematicPng } from '@/features/schematic/schematicRender'
 import { emptyProject } from '@core/ops'
 import { serializeProject } from '@core/serialize'
 import { embedLibrary, importSummary, planImport } from '@core/library'
@@ -223,10 +224,24 @@ export async function exportPng(): Promise<void> {
     notify(t('내보낼 부품이 없습니다'))
     return
   }
+  await exportFile('png', t('배선도'), dataUrlBytes(url))
+}
+
+/** 회로도 (039): 회로도 탭을 열지 않았어도 그린다 */
+export async function exportSchematicPng(): Promise<void> {
+  const url = renderSchematicPng(useProjectStore.getState().project)
+  if (!url) {
+    notify(t('내보낼 부품이 없습니다'))
+    return
+  }
+  await exportFile('png', t('회로도'), dataUrlBytes(url))
+}
+
+const dataUrlBytes = (url: string) => {
   const bin = atob(url.slice(url.indexOf(',') + 1))
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  await exportFile('png', t('배선도'), bytes)
+  return bytes
 }
 
 export interface PdfSettings {
@@ -235,7 +250,7 @@ export interface PdfSettings {
   notes: string
   paper: PaperSize
   landscape: boolean
-  include: { diagram: boolean; bom: boolean; netlist: boolean }
+  include: { diagram: boolean; schematic: boolean; bom: boolean; netlist: boolean }
 }
 
 const colorName = (hex: string) => {
@@ -269,6 +284,7 @@ export async function exportPdf(s: PdfSettings): Promise<boolean> {
     paper: s.paper,
     landscape: s.landscape,
     diagramPng,
+    schematicPng: s.include.schematic ? (renderSchematicPng(project) ?? undefined) : undefined,
     bom: s.include.bom ? buildScopedBom(inScope()) : undefined,
     currency: projectCurrency(project),
     netlist: s.include.netlist ? buildScopedNetlist(inScope()) : undefined,

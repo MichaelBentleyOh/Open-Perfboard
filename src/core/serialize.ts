@@ -37,7 +37,11 @@ import {
   type PartSymbol,
   SYMBOL_SIDES,
   type SymbolPin,
-  type SymbolSide
+  type SymbolSide,
+  SCH_ROTATIONS,
+  type SchPlacement,
+  type SchRotation,
+  type Schematic
 } from './model'
 import { DRAWING_MAX, DRAWING_MIN, SHAPES_MAX } from './drawing'
 import { isHttpUrl } from './url'
@@ -188,7 +192,9 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v7 → v8: 부품·부속 부품 그림 원본(drawing, 037b)이 생김. 없는 파일은 그대로
   7: (raw) => ({ ...raw, version: 8 }),
   // v8 → v9: 회로도 기호(symbol)와 핀 전기 종류(electrical, 038)가 생김. 없는 파일은 그대로
-  8: (raw) => ({ ...raw, version: 9 })
+  8: (raw) => ({ ...raw, version: 9 }),
+  // v9 → v10: 배선도마다 회로도(schematic, 039)가 생김. 없는 파일은 그대로
+  9: (raw) => ({ ...raw, version: 10 })
 }
 
 /** v6 → v7: 전선 길이(length, mm)를 메모 뒤에 "L=250 mm"로 옮긴다 (값을 잃지 않게) */
@@ -316,15 +322,73 @@ function readProject(o: Record<string, unknown>, errors: Errors): Project | unde
     }
   })
 
+  const schematic = o.schematic === undefined ? undefined : readSchematic(o.schematic, errors, { instances: instanceById, junctions: junctionIds, wires: new Set(wires.map((w) => w.id)) })
+
   if (name === undefined) return undefined
   return {
     version: PROJECT_FILE_VERSION, name, parts, instances, wires,
+    ...(schematic && Object.keys(schematic).length > 0 ? { schematic } : {}),
     ...(junctions.length > 0 ? { junctions } : {}),
     ...(notes.length > 0 ? { notes } : {}),
     ...(meta ? { meta } : {}),
     ...(bom ? { bom } : {}),
     ...(Object.keys(supplies).length > 0 ? { supplies } : {})
   }
+}
+
+/** 회로도 (039). 없는 부품·접속점·전선을 가리키는 항목은 조용히 뺀다 (지운 뒤 남은 자리) */
+function readSchematic(
+  v: unknown,
+  errors: Errors,
+  known: { instances: ReadonlyMap<string, unknown>; junctions: ReadonlySet<string>; wires: ReadonlySet<string> }
+): Schematic | undefined {
+  if (!isObject(v)) return notObject('schematic', errors)
+  const point = (o: unknown, path: string) => {
+    if (!isObject(o)) return notObject(path, errors)
+    const x = num(o, 'x', path + '.', errors, { min: -1e7, max: 1e7 })
+    const y = num(o, 'y', path + '.', errors, { min: -1e7, max: 1e7 })
+    return x === undefined || y === undefined ? undefined : { o, x, y }
+  }
+  const out: Schematic = {}
+  if (v.symbols !== undefined) {
+    if (!isObject(v.symbols)) errors.push('{path}: 객체가 아닙니다', { path: 'schematic.symbols' })
+    else {
+      const symbols: Record<string, SchPlacement> = {}
+      for (const [id, raw] of Object.entries(v.symbols)) {
+        const path = `schematic.symbols.${id}`
+        const p = point(raw, path)
+        if (!p) continue
+        const rotation = p.o.rotation
+        if (rotation !== undefined && !SCH_ROTATIONS.includes(rotation as SchRotation)) {
+          errors.push('{path}: 범위를 벗어났습니다 ({value})', { path: `${path}.rotation`, value: String(rotation) })
+          continue
+        }
+        const mirror = optBool(p.o, 'mirror', path + '.', errors)
+        if (!known.instances.has(id)) continue
+        symbols[id] = { x: p.x, y: p.y, ...(rotation ? { rotation: rotation as SchRotation } : {}), ...(mirror.mirror ? { mirror: true } : {}) }
+      }
+      if (Object.keys(symbols).length > 0) out.symbols = symbols
+    }
+  }
+  if (v.junctions !== undefined) {
+    if (!isObject(v.junctions)) errors.push('{path}: 객체가 아닙니다', { path: 'schematic.junctions' })
+    else {
+      const junctions: Record<string, { x: number; y: number }> = {}
+      for (const [id, raw] of Object.entries(v.junctions)) {
+        const p = point(raw, `schematic.junctions.${id}`)
+        if (p && known.junctions.has(id)) junctions[id] = { x: p.x, y: p.y }
+      }
+      if (Object.keys(junctions).length > 0) out.junctions = junctions
+    }
+  }
+  if (v.labeled !== undefined) {
+    if (!Array.isArray(v.labeled) || !v.labeled.every((x) => typeof x === 'string')) errors.push('{path}: 배열이어야 합니다', { path: 'schematic.labeled' })
+    else {
+      const labeled = [...new Set(v.labeled as string[])].filter((id) => known.wires.has(id))
+      if (labeled.length > 0) out.labeled = labeled
+    }
+  }
+  return out
 }
 
 function readSupply(v: unknown, path: string, errors: Errors): Supply | undefined {
@@ -533,7 +597,13 @@ function readShape(v: unknown, path: string, errors: Errors): Shape | undefined 
       const stroke = typeof v.stroke === 'string' && COLOR.test(v.stroke) ? v.stroke : undefined
       if (!stroke) errors.push('{path}: 색은 #rrggbb 형식이어야 합니다', { path: `${path}stroke` })
       const strokeWidth = num(v, 'strokeWidth', path, errors, { min: 0, max: 200 })
-      const extra = { ...optBool(v, 'arrowStart', path, errors), ...optBool(v, 'arrowEnd', path, errors), ...optBool(v, 'dashed', path, errors) }
+      const extra = {
+        ...optBool(v, 'arrowStart', path, errors),
+        ...optBool(v, 'arrowEnd', path, errors),
+        ...optBool(v, 'dashed', path, errors),
+        ...optBool(v, 'closed', path, errors),
+        ...optColor(v, 'fill', path, errors)
+      }
       if (!ok || !stroke || strokeWidth === undefined) return undefined
       return { ...head, type: 'line', points: [...(points as number[])], stroke, strokeWidth, ...extra }
     }

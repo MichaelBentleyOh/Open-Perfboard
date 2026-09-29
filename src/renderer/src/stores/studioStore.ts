@@ -43,6 +43,9 @@ interface StudioState {
   setEditorDirty: (dirty: boolean) => void
   /** 편집 영역을 다시 시작하게 하는 번호 (저장·되돌리기 뒤) */
   editorKey: number
+  /** 부품 편집기에서 보던 탭 (저장해 다시 열려도 그대로, 다른 항목을 열면 처음으로) */
+  partView: PartView | null
+  setPartView: (v: PartView) => void
   /** 다른 항목을 연다. 고치던 게 있으면 묻고, 취소하면 false */
   select: (sel: StudioSelection | null) => boolean
   /** 편집 영역의 변경을 버린다 (새 항목이면 닫는다) */
@@ -66,6 +69,8 @@ export function studioItems(s: Pick<StudioState, 'target' | 'file'>): { parts: P
 
 const notify = (m: string) => useUiStore.getState().notify(m)
 
+export type PartView = 'draw' | 'pins' | 'symbol'
+
 export const useStudioStore = create<StudioState>((set, get) => {
   /** 편집 중인 내용·파일 변경을 버려도 되는지 묻는다 */
   const confirmEditor = () => !get().editorDirty || window.confirm(t('고치던 내용을 저장하지 않았습니다.\n버리고 계속할까요?'))
@@ -82,12 +87,14 @@ export const useStudioStore = create<StudioState>((set, get) => {
     editorDirty: false,
     setEditorDirty: (editorDirty) => set({ editorDirty }),
     editorKey: 0,
+    partView: null,
+    setPartView: (partView) => set({ partView }),
 
     select: (sel) => {
       const cur = get().selected
       if (sel && cur && sel.id === cur.id && sel.kind === cur.kind && !sel.isNew) return true
       if (!confirmEditor()) return false
-      set({ selected: sel, editorDirty: false, editorKey: get().editorKey + 1 })
+      set({ selected: sel, editorDirty: false, editorKey: get().editorKey + 1, partView: null })
       return true
     },
 
