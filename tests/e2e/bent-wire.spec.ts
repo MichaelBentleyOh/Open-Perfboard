@@ -66,6 +66,7 @@ test('꺾어서 배선: 빈 곳 클릭으로 꺾기 → 직각/직선 → 손잡
     expect((await getProject(win)).wires[0].points![0]).toEqual(bend)
 
     // 5. 선 더블클릭 = 꺾임점 추가 (첫 구간: 핀 b에서 꺾임점 x까지 가로선 위)
+    await nextFrame(win)
     const b1Now = await pinAt(win, u1, 'b')
     await win.mouse.dblclick((b1Now.x + h.x) / 2, b1Now.y)
     wire = (await getProject(win)).wires[0]
@@ -73,7 +74,8 @@ test('꺾어서 배선: 빈 곳 클릭으로 꺾기 → 직각/직선 → 손잡
     expect(wire.points![1]).toEqual(bend) // 새 점은 앞에 들어간다
     await expect(props.getByTestId('bend-count')).toHaveText('2개')
 
-    // 6. 손잡이 더블클릭 = 삭제, "모두 지우기"
+    // 6. 손잡이 더블클릭 = 삭제, "모두 지우기" (새 손잡이가 그려진 뒤에 누른다: 느린 CI에서는 선을 눌러 점이 더 생겼다)
+    await nextFrame(win)
     const h0 = await toClient(win, wire.points![0])
     await win.mouse.dblclick(h0.x, h0.y)
     expect((await getProject(win)).wires[0].points).toEqual([bend])
