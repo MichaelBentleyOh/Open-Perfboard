@@ -8,6 +8,7 @@ test('? 버튼·?·F1로 단축키 도움말, 목록은 실제 단축키와 같�
   seedLibrary(userData)
   const { app, win } = await launchApp(userData)
   try {
+    await expect(win).toHaveTitle(/Open Perfboard/)
     const dialog = win.getByRole('dialog', { name: '단축키 도움말' })
 
     // 1. "저장" 옆 ? 버튼 → 도움말: 새 키(V, W, F, Shift+F, Home)와 마우스 조작
@@ -45,13 +46,15 @@ test('? 버튼·?·F1로 단축키 도움말, 목록은 실제 단축키와 같�
     await dialog.getByRole('button', { name: '닫기' }).click()
     await expect(dialog).toHaveCount(0)
 
-    // 4. 새 모드 키: W = 배선, V = 선택
+    // 4. 새 모드 키: W = 배선(안내 표시), V = 선택(안내 사라짐)
     await win.keyboard.press('w')
     await expect(modes.getByRole('button', { name: '✎ 배선' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(win.getByRole('status')).toContainText('배선 모드')
     await win.keyboard.press('w') // 토글이 아니라 배선 모드 유지
     await expect(modes.getByRole('button', { name: '✎ 배선' })).toHaveAttribute('aria-pressed', 'true')
     await win.keyboard.press('v')
     await expect(modes.getByRole('button', { name: '↖ 선택' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(win.getByRole('status')).toHaveCount(0)
 
     // 5. 영어 모드에서는 영어로
     await win.getByRole('button', { name: 'EN' }).click()

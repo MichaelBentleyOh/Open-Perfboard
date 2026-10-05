@@ -57,25 +57,13 @@ test('시작 화면: 홈 두 버튼 → 배선도 → 홈으로 → 최근 배�
     await expect(win.getByTestId('doc-name')).toHaveText('board')
     await expect(win.locator('.home')).toHaveCount(0)
 
-    // 다른 이름으로 저장 → 최근 목록 2개 → 하나 빼기(파일은 그대로) → 목록 지우기
-    const file2 = join(makeTempDir('opb-start-'), 'board2.opb')
-    await stubDialogs(second.app, { save: file2 })
-    await win.keyboard.press('Control+Shift+s')
-    await expect(win.getByTestId('doc-name')).toHaveText('board2')
-    // 파일 메뉴의 최근 파일에도 ✕
-    await win.getByText('파일 ▾').click()
-    await expect(win.getByRole('button', { name: '목록에서 빼기: board2' })).toBeAttached()
-    await win.getByText('파일 ▾').click()
+    // 홈의 최근 목록에서 ✕ = 목록에서만 빼기 (파일은 그대로). 순서·목록 지우기는 recent.spec
     await win.getByRole('button', { name: '홈', exact: true }).click()
     const recent = win.locator('.home').getByRole('region', { name: '최근 배선도' })
-    await expect(recent.getByRole('listitem')).toHaveCount(2)
-    await recent.getByRole('button', { name: '목록에서 빼기: board', exact: true }).click()
     await expect(recent.getByRole('listitem')).toHaveCount(1)
-    await expect(recent.getByRole('button', { name: /^board2/ })).toBeVisible()
-    expect(existsSync(file)).toBe(true)
-    await recent.getByRole('button', { name: '목록 지우기' }).click()
+    await recent.getByRole('button', { name: '목록에서 빼기: board', exact: true }).click()
     await expect(recent.getByText('최근에 연 배선도가 없습니다')).toBeVisible()
-    expect(existsSync(file2)).toBe(true)
+    expect(existsSync(file)).toBe(true)
   } finally {
     await second.app.close()
   }

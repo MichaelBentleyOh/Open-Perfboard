@@ -45,6 +45,8 @@ test('최근 파일: 저장·열기 순서, 없어진 파일은 표시 후 빼�
     expect((await getProject(win)).instances).toHaveLength(2)
     menu = await recentMenu(win)
     await expect(menu.getByRole('menuitem')).toHaveText([/^alpha/, /^beta/, '목록 지우기'])
+    // 항목마다 ✕(목록에서 빼기)
+    await expect(win.getByRole('button', { name: '목록에서 빼기: beta' })).toBeAttached()
 
     // 지워진 파일: 흐리게 표시 → 누르면 알림과 함께 목록에서 빠짐
     rmSync(b)
