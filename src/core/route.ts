@@ -1,14 +1,15 @@
 // 배선 자동 정리(자동 경로). 격자 위 A* 탐색으로 직각 경로를 찾는다.
-// 부품 사진은 "비싼 곳"(막힌 곳이 아님), 앞서 정리한 전선과 같은 줄에 겹치면 큰 벌점, 꺾을 때마다 벌점.
+// 부품 둘레는 "비싼 곳", 부품 사진 안쪽은 지나갈 수 없다. 앞서 정리한 전선과 같은 줄에 겹치면 큰 벌점, 꺾을 때마다 벌점.
+// 끝점 핀은 자기 부품 사진 안에 있으므로, 자기 부품 안에서는 핀에서 곧게 빠져나가는 길(탈출)과 핀으로 곧게 들어오는 길만 쓴다.
 import type { Point, Rect } from './geometry'
 import { CellIndex } from './lookup'
 
 export interface RouteObstacle {
   /** 피하는 영역 (지나면 비싸다) */
   rect: Rect
-  /** 부품 배치 id (끝점이 이 부품의 핀이면 벌점을 줄인다) */
+  /** 부품 배치 id (끝점이 이 부품의 핀이면 둘레 벌점을 줄인다) */
   owner?: string
-  /** 절대 지나갈 수 없는 영역 (부품 사진). 끝점이 이 부품의 핀이면 막지 않는다 (핀에서 빠져나와야 하므로) */
+  /** 지나갈 수 없는 영역 (부품 사진). 끝점이 이 부품의 핀이면 그 핀에서 곧게 드나드는 길만 허락한다 */
   hard?: Rect
 }
 
@@ -16,8 +17,10 @@ export interface RouteRequest {
   id: string
   a: Point
   b: Point
-  /** 끝점이 속한 부품 배치 id */
-  owners?: readonly string[]
+  /** a가 핀이면 그 부품 배치 id */
+  aOwner?: string
+  /** b가 핀이면 그 부품 배치 id */
+  bOwner?: string
 }
 
 export interface RouteOptions {
@@ -222,16 +225,23 @@ export function routeAll(
   // 지나갈 수 없는 사진 영역
   const hardIndex = new CellIndex<number>(OBSTACLE_CELL)
   obstacles.forEach((b, k) => b.hard && hardIndex.add(k, b.hard.x, b.hard.y, b.hard.x + b.hard.width, b.hard.y + b.hard.height))
-  /** 점이 (own에 없는 부품의) 사진 안쪽에 있으면 true. 가장자리는 괜찮다 */
-  const blocked = (x: number, y: number, own: ReadonlySet<string>): boolean => {
+  const inside = (r: Rect, x: number, y: number) => x > r.x && x < r.x + r.width && y > r.y && y < r.y + r.height
+  /**
+   * 점이 어느 부품 사진 안쪽에 있나 (가장자리는 괜찮다). 비트: 1 남의 부품, 2 a의 부품, 4 b의 부품.
+   * a·b가 같은 부품이면 2와 4가 함께
+   */
+  const hardAt = (x: number, y: number, aOwner?: string, bOwner?: string): number => {
+    let bits = 0
     for (const k of hardIndex.at(x, y) ?? []) {
       const b = obstacles[k]
-      const r = b.hard!
-      if (b.owner !== undefined && own.has(b.owner)) continue
-      if (x > r.x && x < r.x + r.width && y > r.y && y < r.y + r.height) return true
+      if (!inside(b.hard!, x, y)) continue
+      const mine = (b.owner !== undefined && b.owner === aOwner ? 2 : 0) | (b.owner !== undefined && b.owner === bOwner ? 4 : 0)
+      bits |= mine || 1
     }
-    return false
+    return bits
   }
+  /** 부품 배치의 사진 영역 */
+  const hardOf = (owner?: string): Rect | undefined => (owner === undefined ? undefined : obstacles.find((b) => b.owner === owner && b.hard)?.hard)
 
   /** 점을 덮는 부품 번호 (여럿이면 가장 앞 번호), 없으면 -1 */
   const cover = (x: number, y: number): number => {
@@ -271,11 +281,17 @@ export function routeAll(
     const vr = [...vRuns.inRect(x0, y0, x1, y1)].filter((u) => u.at >= x0 && u.at <= x1 && u.hi >= y0 && u.lo <= y1)
     const pins = [...pinIndex.inRect(x0 - o.pinClear, y0 - o.pinClear, x1 + o.pinClear, y1 + o.pinClear)]
 
-    // 창 안의 격자선: 간격마다 한 줄 + 두 끝 + 차지한 줄과 그 끝
+    // 끝점 핀의 부품 사진: 그 안에서는 핀에서 곧게 드나드는 길만 (탈출·진입)
+    const aRect = hardOf(r.aOwner)
+    const bRect = hardOf(r.bOwner)
+    const edgesX = [aRect, bRect].flatMap((q) => (q ? [q.x, q.x + q.width] : []))
+    const edgesY = [aRect, bRect].flatMap((q) => (q ? [q.y, q.y + q.height] : []))
+
+    // 창 안의 격자선: 간격마다 한 줄 + 두 끝 + 차지한 줄과 그 끝 + 끝점 부품의 가장자리 (탈출이 가장자리에서 딱 끝나게)
     const inX = (v: number) => v >= x0 && v <= x1
     const inY = (v: number) => v >= y0 && v <= y1
-    const xs = gridLines(x0, x1, o.step, [r.a.x, r.b.x, ...vr.map((u) => u.at), ...hr.flatMap((u) => [u.lo, u.hi])]).filter(inX)
-    const ys = gridLines(y0, y1, o.step, [r.a.y, r.b.y, ...hr.map((u) => u.at), ...vr.flatMap((u) => [u.lo, u.hi])]).filter(inY)
+    const xs = gridLines(x0, x1, o.step, [r.a.x, r.b.x, ...edgesX, ...vr.map((u) => u.at), ...hr.flatMap((u) => [u.lo, u.hi])]).filter(inX)
+    const ys = gridLines(y0, y1, o.step, [r.a.y, r.b.y, ...edgesY, ...hr.map((u) => u.at), ...vr.flatMap((u) => [u.lo, u.hi])]).filter(inY)
     const w = xs.length
     const h = ys.length
     const yi = new Map(ys.map((v, j) => [v, j]))
@@ -283,25 +299,31 @@ export function routeAll(
     const node = (i: number, j: number) => j * w + i
 
     // 간선을 덮는 부품, 격자점 정보 (탐색 중에는 배열만 읽는다)
-    const own = new Set(r.owners ?? [])
+    const own = new Set([r.aOwner, r.bOwner].filter((x): x is string => x !== undefined))
     const N = w * h
     const hObs = new Int32Array(N)
     const vObs = new Int32Array(N)
     /** 비트: 1 가로 간선 사용, 2 세로 간선 사용, 4 가로 전선이 지나는 점, 8 세로 전선이 지나는 점, 16 핀 근처,
      *  32 가로 간선 막힘, 64 세로 간선 막힘 (남의 부품 사진 안) */
     const flags = new Uint8Array(N)
+    /** 끝점 부품 사진 안의 간선. 비트: 1 가로·a 부품, 2 세로·a 부품, 4 가로·b 부품, 8 세로·b 부품 */
+    const mine = new Uint8Array(N)
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const n = node(i, j)
         if (i + 1 < w) {
           const mx = (xs[i] + xs[i + 1]) / 2
           hObs[n] = cover(mx, ys[j])
-          if (blocked(mx, ys[j], own)) flags[n] |= 32
+          const bits = hardAt(mx, ys[j], r.aOwner, r.bOwner)
+          if (bits & 1) flags[n] |= 32
+          mine[n] |= (bits & 2 ? 1 : 0) | (bits & 4 ? 4 : 0)
         } else hObs[n] = -1
         if (j + 1 < h) {
           const my = (ys[j] + ys[j + 1]) / 2
           vObs[n] = cover(xs[i], my)
-          if (blocked(xs[i], my, own)) flags[n] |= 64
+          const bits = hardAt(xs[i], my, r.aOwner, r.bOwner)
+          if (bits & 1) flags[n] |= 64
+          mine[n] |= (bits & 2 ? 2 : 0) | (bits & 4 ? 8 : 0)
         } else vObs[n] = -1
       }
     }
@@ -349,6 +371,21 @@ export function routeAll(
       return Math.abs(dx) + Math.abs(dy) + (bend ? o.bendCost : 0)
     }
 
+    /**
+     * 끝점 부품 사진 안의 간선 (i, j) → (ni, nj)를 지날 수 있나. a에서 곧게 멀어지는 길(탈출)이나 b로 곧게 다가가는 길(진입)만.
+     * 사진 안에서는 꺾지 않는다 → 부품을 가로지르거나 안에서 돌아다니지 않는다. bits = mine의 이 간선 비트
+     */
+    const ownEdgeOk = (bits: number, horizontal: boolean, i: number, j: number, ni: number, nj: number, d: number, nd: number): boolean => {
+      const straight = d === 4 || d === nd
+      const from = (p: Point) => (horizontal ? Math.abs(xs[i] - p.x) : Math.abs(ys[j] - p.y))
+      const to = (p: Point) => (horizontal ? Math.abs(xs[ni] - p.x) : Math.abs(ys[nj] - p.y))
+      const onRay = (p: Point) => (horizontal ? ys[j] === p.y : xs[i] === p.x)
+      if (bits & (1 | 2) && straight && onRay(r.a) && to(r.a) > from(r.a)) return true
+      // 진입은 사진 가장자리(또는 바깥)에서 꺾어 들어올 수 있다
+      const turnOk = straight || !(bRect && inside(bRect, xs[i], ys[j]))
+      return !!(bits & (4 | 8)) && turnOk && onRay(r.b) && to(r.b) < from(r.b)
+    }
+
     // 상태 = 격자점 * 5 + 들어온 방향
     const cost = new Float64Array(N * 5).fill(Infinity)
     const prev = new Int32Array(N * 5).fill(-1)
@@ -380,8 +417,11 @@ export function routeAll(
         const horizontal = nd < 2
         const edge = horizontal ? (nd === 0 ? n : m) : nd === 2 ? n : m
         if (flags[edge] & (horizontal ? 32 : 64)) continue // 남의 부품 사진은 지나갈 수 없다
+        const inOwn = mine[edge] & (horizontal ? 1 | 4 : 2 | 8)
+        if (inOwn && !ownEdgeOk(inOwn, horizontal, i, j, ni, nj, d, nd)) continue // 자기 부품은 곧은 탈출·진입만
         const len = horizontal ? Math.abs(xs[ni] - xs[i]) : Math.abs(ys[nj] - ys[j])
-        let c = len * factorOf(horizontal ? hObs[edge] : vObs[edge])
+        // 자기 부품 사진 안은 남의 부품 둘레만큼 비싸다 → 가장 짧은 탈출 쪽을 고른다
+        let c = len * (inOwn ? o.partFactor : factorOf(horizontal ? hObs[edge] : vObs[edge]))
         if (flags[edge] & (horizontal ? 1 : 2)) c += len * o.overlapFactor
         if (m !== goal && flags[m] & (horizontal ? 8 : 4)) c += o.crossCost
         if (flags[m] & 16) c += o.pinCost

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avoidParts, pathCrossesParts, segmentCrossesRect } from '@core/avoid'
+import { avoidParts, insideLength, pathCrossesParts, segmentCrossesRect } from '@core/avoid'
 import { endPosition } from '@core/ends'
 import { instanceBounds, type Point } from '@core/geometry'
 import type { Project, Wire } from '@core/model'
@@ -131,5 +131,33 @@ describe('배선 정리도 부품을 가로지르지 않는다', () => {
   it('돌아가는 길이 길어도 가로지르지 않는다', () => {
     const p = routeWires(withWire(row()), ['w'])
     expect(crossesOthers(p)).toBe(false)
+  })
+})
+
+describe('avoidParts: 자기 부품 가로지르기', () => {
+  // 핀이 사진 안쪽 왼쪽 가장자리 근처 (x = 0.1)
+  const inner = makePart('inner', {
+    image: { data: 'data:image/png;base64,AA==', width: 100, height: 100 },
+    pins: [{ id: 'I', number: '1', x: 0.1, y: 0.5 }]
+  })
+  const insideOwn = (p: Project) => {
+    const r = instanceBounds(p.instances[0], p.parts[p.instances[0].partId])
+    const path = pathOf(p)
+    return path.slice(1).reduce((s, q, i) => s + insideLength(path[i], q, r), 0)
+  }
+
+  it('왼쪽 안쪽 핀 → 오른쪽 부품: 자기 부품을 관통하던 전선을 가까운 가장자리로 빠져나가게 바꾼다', () => {
+    let p = addInstance(emptyProject('t'), inner, { id: 'u1', x: 0, y: 0 })
+    p = addInstance(p, part, { id: 'u2', x: 500, y: 0 })
+    const r = connect(p, { id: 'w', from: { instanceId: 'u1', pinId: 'I' }, to: { instanceId: 'u2', pinId: 'L' }, color: '#f00', width: 2, orthogonal: true })
+    if (!r.ok) throw new Error(r.error)
+    const before = r.project
+    // 일직선이면 사진 폭(240)의 90%를 관통
+    expect(insideOwn(before)).toBeGreaterThan(200)
+    const after = avoidParts(before, { wires: ['w'] })
+    expect(insideOwn(after)).toBeLessThanOrEqual(24 + 1)
+    expect(crossesOthers(after)).toBe(false)
+    // 다시 해도 그대로 (이미 괜찮은 전선)
+    expect(avoidParts(after, { wires: ['w'] })).toBe(after)
   })
 })

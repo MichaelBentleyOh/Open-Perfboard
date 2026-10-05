@@ -1,5 +1,6 @@
 // 전선이 부품 사진을 가로지르지 않게 한다.
-// 편집 뒤(연결, 부품 이동·회전·반전 …) 관련 전선 중 남의 부품 사진 안을 지나는 전선만, 꺾임점을 경유지로 삼아 피해 가는 경로로 바꾼다.
+// 편집 뒤(연결, 부품 이동·회전·반전 …) 관련 전선 중 남의 부품 사진 안을 지나거나 자기 부품을 가로지르는(핀에서 빠져나가는 것보다 훨씬 길게 지나는) 전선만,
+// 꺾임점을 경유지로 삼아 피해 가는 경로로 바꾼다.
 import { endInstanceId, endJunctionId, endPosition } from './ends'
 import { instanceBounds, type Point, type Rect } from './geometry'
 import type { Project, Wire } from './model'
@@ -41,6 +42,55 @@ export function segmentCrossesRect(p: Point, q: Point, r: Rect): boolean {
     return lo < hi
   }
   return clip(p.x, q.x - p.x, r.x, r.x + r.width) && clip(p.y, q.y - p.y, r.y, r.y + r.height) && lo < hi
+}
+
+/** 선분 p-q가 사각형 안쪽을 지나는 길이 */
+export function insideLength(p: Point, q: Point, r: Rect): number {
+  let lo = 0
+  let hi = 1
+  const clip = (start: number, delta: number, min: number, max: number): boolean => {
+    if (delta === 0) return start > min && start < max
+    let t0 = (min - start) / delta
+    let t1 = (max - start) / delta
+    if (t0 > t1) [t0, t1] = [t1, t0]
+    lo = Math.max(lo, t0)
+    hi = Math.min(hi, t1)
+    return lo < hi
+  }
+  if (!clip(p.x, q.x - p.x, r.x, r.x + r.width) || !clip(p.y, q.y - p.y, r.y, r.y + r.height)) return 0
+  return (hi - lo) * Math.hypot(q.x - p.x, q.y - p.y)
+}
+
+const insideRect = (p: Point, r: Rect) => p.x > r.x && p.x < r.x + r.width && p.y > r.y && p.y < r.y + r.height
+
+/**
+ * 핀에서 자기 부품 사진 밖으로 빠져나가는 데 봐줄 길이: 가장 가까운 가장자리까지의 1.5배(+격자 한 칸),
+ * 또는 부품 긴 변의 60% 중 큰 것. 사용자가 그린 비스듬한 선·우회로는 건드리지 않고, 반대쪽까지 뚫고 지나가는 것만 잡는다
+ */
+function escapeAllowance(pin: Point, r: Rect): number {
+  const nearest = Math.min(pin.x - r.x, r.x + r.width - pin.x, pin.y - r.y, r.y + r.height - pin.y)
+  return Math.max(nearest * 1.5 + BEND_SNAP, Math.max(r.width, r.height) * 0.6)
+}
+
+/** 경로가 끝점 부품(자기 부품) 안을 빠져나가는 데 필요한 것보다 훨씬 길게 지나는지 (부품을 가로지름) */
+function overrunsOwnParts(path: readonly Point[], w: Wire, boxById: ReadonlyMap<string, PartBox>): boolean {
+  const ends: [string | undefined, Point][] = [
+    [endInstanceId(w.from), path[0]],
+    [endInstanceId(w.to), path[path.length - 1]]
+  ]
+  const allowance = new Map<string, number>()
+  for (const [id, pin] of ends) {
+    const box = id === undefined ? undefined : boxById.get(id)
+    if (!box || !insideRect(pin, box.rect)) continue
+    allowance.set(box.id, (allowance.get(box.id) ?? 0) + escapeAllowance(pin, box.rect))
+  }
+  for (const [id, allowed] of allowance) {
+    const r = boxById.get(id)!.rect
+    let inside = 0
+    for (let k = 0; k < path.length - 1; k++) inside += insideLength(path[k], path[k + 1], r)
+    if (inside > allowed) return true
+  }
+  return false
 }
 
 /** 전선 끝이 붙은 부품 (그 부품에서 빠져나오는 부분은 괜찮다) */
@@ -106,7 +156,7 @@ function relatedWires(project: Project, changed: Changed, boxes: readonly PartBo
   })
 }
 
-/** 바뀐 것과 관련된 전선 중 남의 부품 사진을 가로지르는 전선 */
+/** 바뀐 것과 관련된 전선 중 남의 부품 사진을 지나거나 자기 부품을 가로지르는 전선 */
 export function crossingWires(
   project: Project,
   changed: Changed,
@@ -114,15 +164,18 @@ export function crossingWires(
   index: CellIndex<PartBox> = indexBoxes(boxes)
 ): Wire[] {
   if (boxes.length === 0) return []
+  const boxById = new Map(boxes.map((b) => [b.id, b]))
   return relatedWires(project, changed, boxes).filter((w) => {
     const a = endPosition(project, w.from)
     const b = endPosition(project, w.to)
-    return !!a && !!b && crossesIndexed(wirePath(a, w.points, b, w.orthogonal), index, ownParts(w))
+    if (!a || !b) return false
+    const path = wirePath(a, w.points, b, w.orthogonal)
+    return crossesIndexed(path, index, ownParts(w)) || overrunsOwnParts(path, w, boxById)
   })
 }
 
 /**
- * 바뀐 것과 관련된 전선 중 남의 부품 사진을 가로지르는 전선을 피해 가는 직각 경로로 바꾼다.
+ * 바뀐 것과 관련된 전선 중 남의 부품 사진을 지나거나 자기 부품을 가로지르는 전선을 피해 가는 직각 경로로 바꾼다.
  * 꺾임점은 경유지로 지킨다(부품 안에 있으면 바깥으로 옮김). 피할 길이 없는 전선은 그대로 둔다.
  * 바뀐 것이 없으면 같은 객체를 돌려준다.
  */
@@ -140,15 +193,17 @@ export function avoidParts(project: Project, changed: Changed): Project {
     const a = endPosition(project, w.from)!
     const b = endPosition(project, w.to)!
     const stops = [a, ...(w.points ?? []).map((p) => pushOutside(p, index)), b]
-    const own = ownParts(w)
     const fromOwner = endInstanceId(w.from)
     const toOwner = endInstanceId(w.to)
     for (let k = 0; k < stops.length - 1; k++) {
-      // 첫 구간은 시작 부품에서, 마지막 구간은 끝 부품으로 빠져나가야 하므로 그 부품만 지날 수 있다
-      const owners = [k === 0 ? fromOwner : undefined, k === stops.length - 2 ? toOwner : undefined].filter(
-        (x): x is string => x !== undefined && own.has(x)
-      )
-      requests.push({ id: `${w.id}#${k}`, a: stops[k], b: stops[k + 1], owners })
+      // 첫 구간은 시작 핀에서 빠져나가고, 마지막 구간은 끝 핀으로 들어간다 (그 부품 안에서는 곧게만)
+      requests.push({
+        id: `${w.id}#${k}`,
+        a: stops[k],
+        b: stops[k + 1],
+        ...(k === 0 && fromOwner ? { aOwner: fromOwner } : {}),
+        ...(k === stops.length - 2 && toOwner ? { bOwner: toOwner } : {})
+      })
     }
     legsOf.set(w.id, stops.length - 1)
   }

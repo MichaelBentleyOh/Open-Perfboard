@@ -439,8 +439,9 @@ export function routeJob(project: Project, wireIds: readonly string[]): RouteJob
     const b = endPosition(project, w.to)
     if (!a || !b) continue
     if (ids.has(w.id)) {
-      const owners = [endInstanceId(w.from), endInstanceId(w.to)].filter((x): x is string => x !== undefined)
-      requests.push({ id: w.id, a, b, owners })
+      const aOwner = endInstanceId(w.from)
+      const bOwner = endInstanceId(w.to)
+      requests.push({ id: w.id, a, b, ...(aOwner ? { aOwner } : {}), ...(bOwner ? { bOwner } : {}) })
     } else fixed.push(wirePath(a, w.points, b, w.orthogonal))
   }
   // 끝점이 아닌 핀·접속점 위를 지나면 이어진 것처럼 보이므로 피한다

@@ -53,7 +53,7 @@ describe('routeAll', () => {
     const own = { x: -50, y: -50, width: 100, height: 100 }
     const other = { x: 150, y: -60, width: 60, height: 120 }
     const { w } = routeAll(
-      [{ id: 'w', a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, owners: ['U1'] }],
+      [{ id: 'w', a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, aOwner: 'U1' }],
       [
         { rect: own, owner: 'U1' },
         { rect: other, owner: 'U2' }
@@ -109,7 +109,7 @@ describe('routeAll 성능', () => {
     const requests = Array.from({ length: 40 }, (_, n) => {
       const i = n % 12
       const j = (n * 5 + 3) % 12
-      return { id: `w${n}`, a: pinOf(i), b: pinOf(j === i ? (j + 1) % 12 : j), owners: [`U${i}`, `U${j}`] }
+      return { id: `w${n}`, a: pinOf(i), b: pinOf(j === i ? (j + 1) % 12 : j), aOwner: `U${i}`, bOwner: `U${j}` }
     })
     const t = performance.now()
     const r = routeAll(requests, obstacles)
@@ -138,5 +138,49 @@ describe('routeWires', () => {
     const [first, ...rest] = p.wires
     const routed = routeWires(p, [first.id])
     expect(routed.wires.slice(1)).toEqual(rest)
+  })
+})
+
+describe('routeAll: 끝점 부품 (자기 부품)', () => {
+  // 부품 A (0,0)–(200,200), 사진 안은 지나갈 수 없음
+  const A = { x: 0, y: 0, width: 200, height: 200 }
+  const obstacles = [{ rect: A, owner: 'A', hard: A }]
+  const insideA = (path: Point[]) =>
+    path.slice(1).reduce((sum, q, i) => {
+      const p = path[i]
+      if (p.y === q.y && p.y > A.y && p.y < A.y + A.height) {
+        return sum + Math.max(0, Math.min(Math.max(p.x, q.x), A.x + A.width) - Math.max(Math.min(p.x, q.x), A.x))
+      }
+      if (p.x === q.x && p.x > A.x && p.x < A.x + A.width) {
+        return sum + Math.max(0, Math.min(Math.max(p.y, q.y), A.y + A.height) - Math.max(Math.min(p.y, q.y), A.y))
+      }
+      return sum
+    }, 0)
+
+  it('왼쪽 가장자리 근처 핀 → 오른쪽 멀리: 부품을 가로지르지 않고 가까운 가장자리로 곧게 빠져나간다', () => {
+    const { w } = routeAll([{ id: 'w', a: { x: 20, y: 100 }, b: { x: 500, y: 100 }, aOwner: 'A' }], obstacles)
+    expect(w[0]).toEqual({ x: 20, y: 100 })
+    // 왼쪽 가장자리 너머까지 곧게 (가장자리에서 꺾지 않고 이어 가면 그 점은 합쳐진다)
+    expect(w[1].y).toBe(100)
+    expect(w[1].x).toBeLessThanOrEqual(0)
+    expect(insideA(w)).toBe(20)
+    expect(isOrthogonal(w)).toBe(true)
+  })
+
+  it('목표 쪽으로도 같다: 오른쪽 멀리서 → 왼쪽 가장자리 근처 핀으로 곧게 들어간다', () => {
+    const { w } = routeAll([{ id: 'w', a: { x: 500, y: 100 }, b: { x: 20, y: 100 }, bOwner: 'A' }], obstacles)
+    expect(w[w.length - 2].y).toBe(100)
+    expect(w[w.length - 2].x).toBeLessThanOrEqual(0)
+    expect(insideA(w)).toBe(20)
+  })
+
+  it('같은 부품의 두 핀: 각자 가까운 가장자리로 빠져나가 바깥으로 잇는다', () => {
+    const { w } = routeAll([{ id: 'w', a: { x: 20, y: 100 }, b: { x: 180, y: 100 }, aOwner: 'A', bOwner: 'A' }], obstacles)
+    expect(insideA(w)).toBe(40)
+  })
+
+  it('나란한 이웃 핀은 사진 안에서 곧게 바로 잇는다 (돌아가는 것보다 짧다)', () => {
+    const { w } = routeAll([{ id: 'w', a: { x: 100, y: 20 }, b: { x: 110, y: 20 }, aOwner: 'A', bOwner: 'A' }], obstacles)
+    expect(w).toEqual([{ x: 100, y: 20 }, { x: 110, y: 20 }])
   })
 })
