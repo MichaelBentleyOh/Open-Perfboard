@@ -12,7 +12,7 @@
 <div align="center">
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-15803d)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-1.1.0-15803d)](../../releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20%7C%20Linux-0078D6)](#install)
 ![Offline](https://img.shields.io/badge/offline-no%20account%20needed-555)
 
