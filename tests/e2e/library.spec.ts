@@ -80,9 +80,26 @@ test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 �
   try {
     const list = win.getByTestId('part-list')
     await expect(list).toContainText('테스트 보드')
+    // 삭제 확인은 main의 메시지 상자로 묻는다 (렌더러 confirm은 닫힌 뒤 입력이 막히는 일이 있다)
+    await app.evaluate(({ dialog }) => {
+      const g = globalThis as { asked?: string[] }
+      g.asked = []
+      const orig = dialog.showMessageBox
+      dialog.showMessageBox = (async (...args: unknown[]) => {
+        const opts = args.find((a): a is { message: string } => !!a && typeof a === 'object' && 'message' in a)
+        if (opts) g.asked!.push(opts.message)
+        return (orig as (...a: unknown[]) => ReturnType<typeof dialog.showMessageBox>)(...args)
+      }) as typeof dialog.showMessageBox
+    })
     await list.getByRole('button', { name: '삭제' }).click()
     await expect(list).not.toContainText('테스트 보드')
     await expect(win.getByText('부품함이 비어 있습니다.')).toBeVisible()
+    expect(await app.evaluate(() => (globalThis as { asked?: string[] }).asked)).toEqual([expect.stringContaining('테스트 보드')])
+    // 확인 창이 닫힌 뒤 바로 글을 칠 수 있다
+    const search = win.getByPlaceholder('이름·품번으로 찾기')
+    await search.click()
+    await win.keyboard.type('abc')
+    await expect(search).toHaveValue('abc')
   } finally {
     await app.close()
   }

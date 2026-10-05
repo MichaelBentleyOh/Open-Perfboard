@@ -5,6 +5,7 @@ export const EN: Record<string, string> = {
   '저장': 'Save',
   '저장 안 함': "Don't Save",
   '취소': 'Cancel',
+  '확인': 'OK',
   '닫기': 'Close',
   '편집': 'Edit',
   '삭제': 'Delete',

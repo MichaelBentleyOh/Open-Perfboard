@@ -92,6 +92,14 @@ const api = {
     /** http/https 링크를 기본 브라우저로 연다 */
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url)
   },
+  dialog: {
+    /** window.confirm 대신 (닫힌 뒤 입력이 막히지 않게 main의 메시지 상자로). 답을 기다린다 */
+    confirm: (message: string): boolean => ipcRenderer.sendSync('dialog:confirm', message) === true,
+    /** window.alert 대신 */
+    alert: (message: string): void => void ipcRenderer.sendSync('dialog:alert', message),
+    /** 파일·색 고르기 같은 OS 대화상자가 닫힌 뒤 페이지에 키보드 포커스를 돌려받는다 */
+    refocus: (): void => ipcRenderer.send('window:refocus')
+  },
   app: {
     /** 앱 버전, 자동 저장 간격 */
     config: (): Promise<{ version: string; autosaveMs: number }> => ipcRenderer.invoke('app:config'),

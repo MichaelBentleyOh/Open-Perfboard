@@ -1,6 +1,6 @@
 // 렌더러 요청 처리. 채널 이름은 preload/index.ts와 짝을 이룬다.
 // 렌더러는 신뢰하지 않는다: 인자 타입을 확인하고, 파일 형식(필터·확장자)은 main이 정한다.
-import { BrowserWindow, dialog, ipcMain, shell, type FileFilter, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell, type FileFilter, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { basename } from 'node:path'
 import { registerCloseGuardIpc } from './closeGuard'
 import { libraryDir, recentFile, suppliesDir } from './paths'
@@ -10,6 +10,17 @@ import { listParts, removePart, savePart } from './repositories/library'
 import { BUNDLE_EXT, PROJECT_EXT, readProjectFile, writeExportFile, writeProjectFile } from './repositories/project'
 import { renderPdf } from './pdf'
 import { mt, registerLocaleIpc } from './locale'
+
+/**
+ * OS 대화상자가 닫힌 뒤 페이지에 키보드 포커스를 돌려준다. Windows에서 창은 앞에 있는데 입력칸에 글이 안 써지는 일이 있다
+ * (창을 다른 데 눌렀다 오면 풀림 → 그것을 대신 한다). 사용자가 그새 다른 프로그램으로 갔으면 건드리지 않는다
+ */
+function refocus(win: BrowserWindow): void {
+  if (win.isDestroyed() || !win.isFocused()) return
+  win.blur()
+  win.focus()
+  win.webContents.focus()
+}
 
 function assertString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string') throw new Error(`${name}: 문자열이어야 합니다`)
@@ -199,6 +210,37 @@ export function registerIpc(): void {
     const u = new URL(url)
     if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('http/https 주소만 열 수 있습니다')
     await shell.openExternal(u.toString())
+  })
+
+  // ---- 확인·알림 창 (렌더러의 window.confirm/alert 대신, main.tsx에서 바꿔 끼운다)
+  // Windows에서 렌더러의 confirm/alert가 닫힌 뒤 입력칸에 글이 안 써지는 일이 있다 (창을 다른 데 눌렀다 오기 전까지).
+  // main의 메시지 상자로 띄우고, 닫히면 페이지에 포커스를 돌려준다. 렌더러가 답을 기다리도록 sendSync
+  const messageBox = async (e: IpcMainEvent, message: unknown, confirm: boolean) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = {
+      type: confirm ? ('question' as const) : ('info' as const),
+      buttons: confirm ? [mt('확인'), mt('취소')] : [mt('확인')],
+      defaultId: 0,
+      cancelId: confirm ? 1 : 0,
+      noLink: true,
+      title: 'Open Perfboard',
+      message: typeof message === 'string' ? message : String(message)
+    }
+    try {
+      const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+      e.returnValue = confirm ? response === 0 : undefined
+    } catch {
+      e.returnValue = confirm ? false : undefined
+    } finally {
+      if (win) refocus(win)
+    }
+  }
+  ipcMain.on('dialog:confirm', (e, message: unknown) => void messageBox(e, message, true))
+  ipcMain.on('dialog:alert', (e, message: unknown) => void messageBox(e, message, false))
+  // 렌더러가 연 OS 대화상자(파일 고르기·색 고르기)가 닫힌 뒤: 같은 이유로 페이지에 포커스를 돌려준다
+  ipcMain.on('window:refocus', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) refocus(win)
   })
 
   registerCloseGuardIpc()
