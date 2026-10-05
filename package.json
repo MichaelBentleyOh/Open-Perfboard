@@ -1,7 +1,7 @@
 {
   "name": "open-perfboard",
   "productName": "Open Perfboard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "오프라인 실배선도 에디터",
   "main": "./out/main/index.js",
   "private": true,
