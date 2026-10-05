@@ -180,7 +180,7 @@ describe('회로도 (039)', () => {
     const raw = JSON.parse(serializeProject(board()))
     raw.version = 9
     const r = parseProject(JSON.stringify(raw))
-    expect(r.ok && r.value.version).toBe(10)
+    expect(r.ok && r.value.version).toBe(PROJECT_FILE_VERSION)
     expect(r.ok && r.value.schematic).toBeUndefined()
   })
 })

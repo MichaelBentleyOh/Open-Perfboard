@@ -194,7 +194,9 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
   // v8 → v9: 회로도 기호(symbol)와 핀 전기 종류(electrical, 038)가 생김. 없는 파일은 그대로
   8: (raw) => ({ ...raw, version: 9 }),
   // v9 → v10: 배선도마다 회로도(schematic, 039)가 생김. 없는 파일은 그대로
-  9: (raw) => ({ ...raw, version: 10 })
+  9: (raw) => ({ ...raw, version: 10 }),
+  // v10 → v11: 커넥터 색, GND 핀, BOM 부품 수량, 배선도에 올린 부속 부품. 없는 파일은 그대로
+  10: (raw) => ({ ...raw, version: 11 })
 }
 
 /** v6 → v7: 전선 길이(length, mm)를 메모 뒤에 "L=250 mm"로 옮긴다 (값을 잃지 않게) */
@@ -408,6 +410,7 @@ function readSupply(v: unknown, path: string, errors: Errors): Supply | undefine
   const diameter = v.diameter === undefined ? undefined : num(v, 'diameter', path, errors, { min: Number.MIN_VALUE })
   const awg = v.awg === undefined ? undefined : num(v, 'awg', path, errors, { min: AWG_MIN, max: AWG_MAX })
   if (awg !== undefined && !Number.isInteger(awg)) errors.push('{path}: 정수여야 합니다', { path: `${path}awg` })
+  const pinned = v.pins === undefined && v.connectors === undefined ? undefined : readPinsAndConnectors(v, path, errors, true)
   if (id === undefined || name === undefined || !kindOk) return undefined
   return {
     id,
@@ -427,8 +430,25 @@ function readSupply(v: unknown, path: string, errors: Errors): Supply | undefine
     ...(diameter !== undefined ? { diameter } : {}),
     ...optStr(v, 'color', path, errors),
     ...(awg !== undefined ? { awg } : {}),
-    ...optStr(v, 'pack', path, errors)
+    ...optStr(v, 'pack', path, errors),
+    ...(pinned && (pinned.pins.length || pinned.connectors.length) ? pinned : {})
   }
+}
+
+/** 핀·커넥터 목록 (부품, 핀 있는 부속 부품). optional이면 없는 목록은 빈 배열. 핀이 가리키는 커넥터가 있는지 본다 */
+function readPinsAndConnectors(v: Record<string, unknown>, path: string, errors: Errors, optional = false): { connectors: Connector[]; pins: Pin[] } {
+  const read = <V>(key: string, item: (x: unknown, p: string) => V | undefined): V[] =>
+    optional && v[key] === undefined ? [] : list(v, key, path, errors, item)
+  const connectors = read('connectors', (c, p) => readConnector(c, p, errors))
+  checkUnique(connectors, `${path}connectors`, errors)
+  const pins = read('pins', (c, p) => readPin(c, p, errors))
+  checkUnique(pins, `${path}pins`, errors)
+  pins.forEach((pin, i) => {
+    if (pin.connectorId !== undefined && !connectors.some((c) => c.id === pin.connectorId)) {
+      errors.push("{path}: 존재하지 않는 커넥터 '{id}'", { path: `${path}pins[${i}].connectorId`, id: pin.connectorId! })
+    }
+  })
+  return { connectors, pins }
 }
 
 function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined {
@@ -439,16 +459,13 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
   const id = str(v, 'id', path, errors)
   const name = str(v, 'name', path, errors)
   const image = readImage(v.image, `${path}image.`, errors)
-  const connectors = list(v, 'connectors', path, errors, (c, p) => readConnector(c, p, errors))
-  checkUnique(connectors, `${path}connectors`, errors)
-  const pins = list(v, 'pins', path, errors, (c, p) => readPin(c, p, errors))
-  checkUnique(pins, `${path}pins`, errors)
-  pins.forEach((pin, i) => {
-    if (pin.connectorId !== undefined && !connectors.some((c) => c.id === pin.connectorId)) {
-      errors.push("{path}: 존재하지 않는 커넥터 '{id}'", { path: `${path}pins[${i}].connectorId`, id: pin.connectorId! })
-    }
-  })
+  const { connectors, pins } = readPinsAndConnectors(v, path, errors)
   const unitPrice = optPrice(v, 'unitPrice', path, errors)
+  const supplyKind = v.supplyKind
+  const supplyKindOk = SUPPLY_KINDS.includes(supplyKind as SupplyKind)
+  if (supplyKind !== undefined && !supplyKindOk) {
+    errors.push("{path}: 'housing', 'terminal', 'tube', 'wire' 중 하나여야 합니다", { path: `${path}supplyKind` })
+  }
   let attachments: Attachment[] | undefined
   if (v.attachments !== undefined) {
     attachments = list(v, 'attachments', path, errors, (a, p) => readAttachment(a, p, errors))
@@ -477,7 +494,8 @@ function readPart(v: unknown, path: string, errors: Errors): PartDef | undefined
     ...(drawing ? { drawing } : {}),
     ...(symbol ? { symbol } : {}),
     connectors,
-    pins
+    pins,
+    ...(supplyKindOk ? { supplyKind: supplyKind as SupplyKind } : {})
   }
 }
 
@@ -665,7 +683,8 @@ function readConnector(v: unknown, path: string, errors: Errors): Connector | un
   const id = str(v, 'id', path, errors)
   const name = str(v, 'name', path, errors)
   const type = str(v, 'type', path, errors)
-  return id !== undefined && name !== undefined && type !== undefined ? { id, name, type } : undefined
+  const color = optColor(v, 'color', path, errors)
+  return id !== undefined && name !== undefined && type !== undefined ? { id, name, type, ...color } : undefined
 }
 
 function readPin(v: unknown, path: string, errors: Errors): Pin | undefined {
@@ -804,7 +823,8 @@ function readBom(v: unknown, errors: Errors): ProjectBom | undefined {
         }
         const p = `bom.overrides.${key}.`
         const unitPrice = optPrice(o, 'unitPrice', p, errors)
-        overrides[key] = { ...(unitPrice !== undefined ? { unitPrice } : {}), ...optStr(o, 'memo', p, errors), ...optStr(o, 'supplier', p, errors) }
+        const quantity = o.quantity === undefined ? undefined : num(o, 'quantity', p, errors, { min: 0 })
+        overrides[key] = { ...(quantity !== undefined ? { quantity } : {}), ...(unitPrice !== undefined ? { unitPrice } : {}), ...optStr(o, 'memo', p, errors), ...optStr(o, 'supplier', p, errors) }
       }
       bom.overrides = overrides
     }

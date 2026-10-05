@@ -156,7 +156,9 @@ function libSymbol(item: SchSymbolItem, libName: string): LibVariant {
   const pins = symbol.pins.map((sp) => {
     const wp = worldPin({ x: 0, y: 0, ...pl }, pivot, sp)
     const pin = byPin.get(sp.pinId)
-    const kind: PinElectrical = pin?.electrical ?? 'passive'
+    // KiCad에는 GND 핀 종류가 없다: 전원 입력으로
+    const electrical: PinElectrical = pin?.electrical ?? 'passive'
+    const kind = electrical === 'ground' ? 'power_in' : electrical
     const name = pin?.signal?.trim() || '~'
     return (
       `(pin ${kind} line (at ${mm(wp.x)} ${mm(-wp.y)} ${PIN_ANGLE[wp.side]}) (length ${mm(sp.length ?? SYMBOL_PIN_LENGTH)})` +

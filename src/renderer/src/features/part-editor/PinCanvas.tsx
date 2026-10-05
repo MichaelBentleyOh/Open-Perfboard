@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Circle, Group, Image as KImage, Layer, Line, Rect, Stage, Text } from 'react-konva'
 import type Konva from 'konva'
 import type { Connector, PartImage, Pin } from '@core/model'
 import { snapToGuides, straighten, type Guide, type Point } from '@core/guide'
-import { loadHtmlImage } from './image'
+import { checkerPattern, loadHtmlImage } from './image'
 import { connectorColor } from './connectorColor'
 
 const PADDING = 24
@@ -58,11 +58,14 @@ export function PinCanvas({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
+  const checker = useMemo(checkerPattern, [])
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   /** 지금 사진(image.data)을 다 읽었는지. 읽기 전에는 사진 도형이 없어 클릭으로 핀을 찍을 수 없다 */
   const [loadedData, setLoadedData] = useState<string | null>(null)
   /** 긋는 중인 보조선 (사진 기준 0~1) */
   const [drawing, setDrawing] = useState<{ a: Point; b: Point } | null>(null)
+  /** 통째로 끄는 중인 보조선과 움직인 거리 (화면 px). 끝점 손잡이·번호를 같이 옮겨 그린다 */
+  const [guideDrag, setGuideDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
 
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setSize({ width: e.contentRect.width, height: e.contentRect.height }))
@@ -131,7 +134,8 @@ export function PinCanvas({
       {size.width > 0 && (
         <Stage width={size.width} height={size.height} onMouseDown={startGuide} onMouseMove={moveGuide} onMouseUp={endGuide} onMouseLeave={endGuide}>
           <Layer>
-            <Rect x={ox} y={oy} width={w} height={h} fill="#fff" shadowBlur={6} shadowOpacity={0.15} />
+            {/* 바둑판 = 투명한 곳 (배경을 지운 사진) */}
+            <Rect x={ox} y={oy} width={w} height={h} fillPatternImage={checker as unknown as HTMLImageElement} shadowBlur={6} shadowOpacity={0.15} />
             {img && (
               <KImage
                 image={img}
@@ -145,18 +149,22 @@ export function PinCanvas({
               />
             )}
             {guides.map((g, i) => {
-              const a = toScreen(g.a)
-              const b = toScreen(g.b)
+              const a0 = toScreen(g.a)
+              const b0 = toScreen(g.b)
+              // 끄는 중이면 선은 Konva가 옮기고, 번호·손잡이는 여기서 같이 옮긴다
+              const off = guideDrag?.id === g.id ? guideDrag : { dx: 0, dy: 0 }
+              const a = { x: a0.x + off.dx, y: a0.y + off.dy }
+              const b = { x: b0.x + off.dx, y: b0.y + off.dy }
               const selected = g.id === selectedGuideId
               return (
                 <Group key={g.id}>
                   <Line
-                    points={[a.x, a.y, b.x, b.y]}
+                    points={[a0.x, a0.y, b0.x, b0.y]}
                     stroke={selected ? GUIDE_SELECTED : GUIDE_COLOR}
                     strokeWidth={selected ? 2.5 : 1.5}
                     dash={selected ? undefined : [8, 5]}
                     hitStrokeWidth={12}
-                    // 핀 찍기에서는 선 위를 눌러도 핀이 선 위에 찍힌다. 보조선 긋기에서는 선을 고른다
+                    // 핀 찍기에서는 선 위를 눌러도 핀이 선 위에 찍힌다. 보조선 긋기에서는 선을 고르고 끌어 옮긴다
                     onClick={(e) => {
                       if (tool === 'pin') handleImageClick(e)
                       else {
@@ -165,7 +173,21 @@ export function PinCanvas({
                       }
                     }}
                     onMouseDown={(e) => tool === 'guide' && (e.cancelBubble = true)}
-                    onMouseEnter={(e) => cursor(e, tool === 'pin' ? 'crosshair' : 'pointer')}
+                    draggable={tool === 'guide'}
+                    // 양 끝이 사진 밖으로 나가지 않게
+                    dragBoundFunc={(p) => ({
+                      x: Math.min(ox + w - Math.max(a0.x, b0.x), Math.max(ox - Math.min(a0.x, b0.x), p.x)),
+                      y: Math.min(oy + h - Math.max(a0.y, b0.y), Math.max(oy - Math.min(a0.y, b0.y), p.y))
+                    })}
+                    onDragStart={() => onSelectGuide?.(g.id)}
+                    onDragMove={(e) => setGuideDrag({ id: g.id, dx: e.target.x(), dy: e.target.y() })}
+                    onDragEnd={(e) => {
+                      const d = { x: e.target.x(), y: e.target.y() }
+                      e.target.position({ x: 0, y: 0 })
+                      setGuideDrag(null)
+                      onMoveGuide?.(g.id, toNorm({ x: a0.x + d.x, y: a0.y + d.y }), toNorm({ x: b0.x + d.x, y: b0.y + d.y }))
+                    }}
+                    onMouseEnter={(e) => cursor(e, tool === 'pin' ? 'crosshair' : 'move')}
                     onMouseLeave={(e) => cursor(e, 'default')}
                   />
                   <Text

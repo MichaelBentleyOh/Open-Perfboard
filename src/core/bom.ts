@@ -13,7 +13,7 @@ export interface BomRow {
   id: string
   /** supply: 부속 부품 종류 */
   supplyKind?: SupplyKind
-  /** supply: 제안 수량 (배선도에서 계산) */
+  /** part: 배치한 개수 · supply: 제안 수량 (배선도에서 계산). 수량을 고치지 않았으면 quantity와 같다 */
   suggested?: number
   /** 번호 (1부터, 표 순서) */
   no: number
@@ -61,7 +61,7 @@ export const bomDetails = (r: Pick<BomRow, 'partNumber' | 'manufacturer' | 'refD
 /** 번호를 표 순서대로 다시 매긴다 */
 export const numberRows = (rows: readonly BomRow[]): BomRow[] => rows.map((r, i) => (r.no === i + 1 ? r : { ...r, no: i + 1 }))
 
-/** 배선도 부품(정의별 수량) + 직접 추가한 항목. 단가는 BOM 수정값 > 부품 기본 단가 */
+/** 배선도 부품(정의별 수량) + 직접 추가한 항목. 수량·단가는 BOM 수정값 > 배치한 개수·부품 기본 단가 */
 export function buildBom(project: Project): BomRow[] {
   const byPart = new Map<string, string[]>()
   for (const inst of project.instances) {
@@ -79,13 +79,14 @@ export function buildBom(project: Project): BomRow[] {
       withAmount({
         kind: 'part',
         id: partId,
-        category: CATEGORY_PART,
+        suggested: refs.length,
+        category: part.supplyKind ? SUPPLY_KIND_LABEL[part.supplyKind] : CATEGORY_PART,
         name: part.name,
         partNumber: part.partNumber,
         manufacturer: part.manufacturer,
         purchaseUrl: part.purchaseUrl,
         supplier: o.supplier ?? part.supplier,
-        quantity: refs.length,
+        quantity: o.quantity ?? refs.length,
         refDes: refs.sort(naturalCompare),
         unitPrice: o.unitPrice ?? part.unitPrice,
         memo: o.memo

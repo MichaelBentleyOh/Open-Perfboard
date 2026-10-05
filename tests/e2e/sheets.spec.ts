@@ -59,7 +59,8 @@ test('여러 배선도: ＋로 추가 → 각자 실행 취소 → 이름 바꾸
     await expect(list.locator('label').first()).toHaveText('모두 선택')
     await win.screenshot({ path: 'test-results/sheets-scope.png' })
     await list.getByLabel('배선도 1').uncheck()
-    await expect(row.locator('td').nth(4)).toHaveText('1')
+    // 배선도 하나면 수량을 고칠 수 있는 칸이 된다
+    await expect(row.getByLabel('수량')).toHaveValue('1')
     await expect(bom.getByRole('button', { name: '포함할 배선도' })).toContainText('모터부')
     await win.keyboard.press('Escape') // 목록 닫기
     await expect(list).toBeHidden()

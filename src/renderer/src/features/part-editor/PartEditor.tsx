@@ -1,18 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { nanoid } from 'nanoid'
 import type { PartDef } from '@core/model'
-import {
-  addConnector,
-  addPin,
-  checkDraft,
-  finalizeDraft,
-  movePin,
-  removeConnector,
-  removePin,
-  updateConnector,
-  updatePin,
-  type PartDraft
-} from '@core/part'
+import { checkDraft, finalizeDraft, updatePin, type PartDraft } from '@core/part'
 import { parseAmount } from '@core/money'
 import { housingsByType } from '@core/supply'
 import { useSupplyStore } from '@/stores/supplyStore'
@@ -20,12 +9,11 @@ import { readImageFile } from './image'
 import { addAttachments, removeAttachment, renameAttachment } from '@core/attachment'
 import { AttachmentList } from '@/features/attachments/AttachmentList'
 import { useAttachmentRevision } from '@/services/attachmentService'
-import { PinCanvas, type PinTool } from './PinCanvas'
-import { connectorColor } from './connectorColor'
-import { evenPoints, pinsOnGuide, respacePins, type Guide, type Point } from '@core/guide'
+import { PinWorkspace, type PinEdit } from './PinWorkspace'
+import { PinTables } from './PinTables'
+import { BackgroundTool } from './BackgroundTool'
 import { drawingFromImage, emptyDrawing } from '@core/drawing'
-import { PIN_ELECTRICALS, type PinElectrical } from '@core/model'
-import { PIN_ELECTRICAL_LABEL, autoSymbol } from '@core/symbol'
+import { autoSymbol } from '@core/symbol'
 import { DrawingPanel } from '@/features/studio/drawing/DrawingPanel'
 import { bakeDrawing, PART_BAKE_MAX } from '@/features/studio/drawing/bake'
 import { useT } from '@/i18n'
@@ -61,18 +49,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
   // 커넥터 종류: 부속 부품 하우징의 "짝 커넥터"에서 고르거나 직접 입력 (027)
   const supplies = useSupplyStore((s) => s.supplies)
   const housings = useMemo(() => housingsByType(supplies), [supplies])
-  // 보조선 (026): 편집하는 동안만 있고 저장하지 않는다
-  const [tool, setTool] = useState<PinTool>('pin')
-  const [guides, setGuides] = useState<Guide[]>([])
-  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
-  const [snap, setSnap] = useState(true)
-  const [evenCount, setEvenCount] = useState('4')
-  const [preview, setPreview] = useState<Point[]>([])
-  const selectedGuide = guides.find((g) => g.id === selectedGuideId)
-  // 보조선 위 핀을 찾는 허용 거리: 사진 긴 변의 0.5% (붙여 찍은 핀은 거의 0)
-  const imageScale = draft.image ? { x: draft.image.width, y: draft.image.height } : { x: 1, y: 1 }
-  const onGuideTolerance = Math.max(imageScale.x, imageScale.y) * 0.005
-  const count = Math.min(200, Math.max(1, Math.floor(Number(evenCount)) || 1))
+  const editPins = useCallback((edit: PinEdit) => setDraft((d) => edit(d)), [])
 
   // 그림 (037b, 작업실에서만): 그림 탭에서 그리고, 핀 탭으로 갈 때·저장할 때 PNG로 굽는다
   const [view, setView] = useState<PartView>(variant === 'panel' ? (initialView ?? (isNew || initial.drawing ? 'draw' : 'pins')) : 'pins')
@@ -118,54 +95,6 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
       setMessage((e as Error).message)
     }
   }
-
-  const selectPin = (id: string | null) => {
-    setSelectedPinId(id)
-    if (id) setSelectedGuideId(null)
-  }
-  const selectGuide = (id: string | null) => {
-    setSelectedGuideId(id)
-    if (id) setSelectedPinId(null)
-  }
-  /** 고른 보조선에 핀 n개를 같은 간격으로 (양 끝 포함) */
-  const placeEven = () => {
-    if (!selectedGuide) return
-    setDraft((d) =>
-      evenPoints(selectedGuide.a, selectedGuide.b, count).reduce(
-        (acc, p) => addPin(acc, { id: nanoid(), x: p.x, y: p.y, connectorId: activeConnectorId || undefined }),
-        d
-      )
-    )
-    setPreview([])
-  }
-  /** 고른 보조선 위의 핀을 첫 핀 ~ 끝 핀 사이에 같은 간격으로 */
-  const respace = () => {
-    if (!selectedGuide) return
-    setDraft((d) => respacePins(d.pins, selectedGuide, onGuideTolerance, imageScale).reduce((acc, m) => movePin(acc, m.id, m.x, m.y), d))
-  }
-  const onGuidePins = selectedGuide ? pinsOnGuide(draft.pins, selectedGuide, onGuideTolerance, imageScale).length : 0
-
-  // 입력칸 밖에서 Delete/Backspace → 선택한 핀(또는 보조선) 삭제, Esc → 선택 해제
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      // 그림 탭의 키는 그림판이 처리한다
-      if (view === 'draw') return
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPinId) {
-        setDraft((d) => removePin(d, selectedPinId))
-        setSelectedPinId(null)
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedGuideId) {
-        setGuides((gs) => gs.filter((g) => g.id !== selectedGuideId))
-        setSelectedGuideId(null)
-      } else if (e.key === 'Escape') {
-        setSelectedPinId(null)
-        setSelectedGuideId(null)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [selectedPinId, selectedGuideId, view])
 
   const dirty = draft !== initial
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
@@ -277,91 +206,15 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
               />
             ) : (
             <>
-            {draft.image && (
-              <div className="pin-tools">
-                <div className="segmented" role="group" aria-label={t('도구')}>
-                  <button className={tool === 'pin' ? 'active' : ''} aria-pressed={tool === 'pin'} onClick={() => setTool('pin')}>
-                    {t('● 핀 찍기')}
-                  </button>
-                  <button className={tool === 'guide' ? 'active' : ''} aria-pressed={tool === 'guide'} onClick={() => setTool('guide')}>
-                    {t('╱ 보조선 긋기')}
-                  </button>
-                </div>
-                <label className="check">
-                  <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-                  {t('보조선에 붙이기')}
-                </label>
-                {guides.length > 0 && (
-                  <select aria-label={t('보조선 고르기')} value={selectedGuideId ?? ''} onChange={(e) => selectGuide(e.target.value || null)}>
-                    <option value="">{t('보조선 {n}개', { n: guides.length })}</option>
-                    {guides.map((g, i) => (
-                      <option key={g.id} value={g.id}>
-                        {t('보조선 {n}', { n: i + 1 })}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {selectedGuide && (
-                  <div className="guide-actions" role="group" aria-label={t('보조선 작업')}>
-                    <input
-                      className="narrow"
-                      type="number"
-                      min={1}
-                      max={200}
-                      aria-label={t('핀 개수')}
-                      value={evenCount}
-                      onChange={(e) => setEvenCount(e.target.value)}
-                    />
-                    <button
-                      onClick={placeEven}
-                      onMouseEnter={() => setPreview(evenPoints(selectedGuide.a, selectedGuide.b, count))}
-                      onMouseLeave={() => setPreview([])}
-                    >
-                      {t('개 고르게 놓기')}
-                    </button>
-                    <button onClick={respace} disabled={onGuidePins < 3} title={t('보조선 위 핀을 첫 핀과 끝 핀 사이에 같은 간격으로')}>
-                      {t('선 위 핀 간격 맞추기 ({n})', { n: onGuidePins })}
-                    </button>
-                    <button
-                      className="icon"
-                      aria-label={t('보조선 삭제')}
-                      title={t('보조선 삭제 (Delete)')}
-                      onClick={() => {
-                        setGuides((gs) => gs.filter((g) => g.id !== selectedGuide.id))
-                        setSelectedGuideId(null)
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             {draft.image ? (
-              <PinCanvas
+              <PinWorkspace
                 image={draft.image}
                 pins={draft.pins}
                 connectors={draft.connectors}
+                activeConnectorId={activeConnectorId}
                 selectedPinId={selectedPinId}
-                onAddPin={(x, y) => {
-                  const id = nanoid()
-                  setDraft((d) => addPin(d, { id, x, y, connectorId: activeConnectorId || undefined }))
-                  selectPin(id)
-                }}
-                onMovePin={(id, x, y) => setDraft((d) => movePin(d, id, x, y))}
-                onSelectPin={selectPin}
-                tool={tool}
-                guides={guides}
-                selectedGuideId={selectedGuideId}
-                snap={snap}
-                preview={preview}
-                onAddGuide={(a, b) => {
-                  const id = nanoid()
-                  setGuides((gs) => [...gs, { id, a, b }])
-                  selectGuide(id)
-                }}
-                onMoveGuide={(id, a, b) => setGuides((gs) => gs.map((g) => (g.id === id ? { ...g, a, b } : g)))}
-                onSelectGuide={selectGuide}
+                onSelectPin={setSelectedPinId}
+                onChange={editPins}
               />
             ) : (
               <div className="photo-empty">
@@ -369,11 +222,6 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                 <button onClick={() => fileRef.current?.click()}>{t('사진 불러오기')}</button>
               </div>
             )}
-            <p className="hint">
-              {tool === 'pin'
-                ? t('사진을 클릭하면 핀이 추가됩니다 · 핀은 드래그로 이동 · 선택 후 Delete로 삭제 · 보조선 가까이 찍으면 선 위에 붙습니다')
-                : t('사진 위를 끌어 보조선을 긋습니다 (수평·수직에 가까우면 곧게, Shift = 자유 각도) · 선을 눌러 고르고 끝점 손잡이로 조절 · Delete로 삭제')}
-            </p>
             </>
             )}
           </section>
@@ -391,6 +239,14 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
                   handleFile(e.target.files?.[0])
                   e.target.value = ''
                 }}
+              />
+              <BackgroundTool
+                draft={draft}
+                onChange={(photo, rebake) => {
+                  if (rebake) stale.current = true
+                  setDraft((d) => ({ ...d, image: photo.image, drawing: photo.drawing }))
+                }}
+                onError={setMessage}
               />
             </div>
 
@@ -472,170 +328,16 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
               <p className="empty">{t('데이터시트나 핀아웃 그림을 첨부할 수 있습니다.')}</p>
             )}
 
-            <h3>
-              {t('커넥터')}
-              <button className="small" onClick={() => setDraft((d) => addConnector(d, { id: nanoid() }))}>
-                {t('＋ 커넥터')}
-              </button>
-            </h3>
-            {draft.connectors.length === 0 ? (
-              <p className="empty">{t('커넥터 없이 핀만 써도 됩니다.')}</p>
-            ) : (
-              <table className="grid-table">
-                <thead>
-                  <tr>
-                    <th />
-                    <th>{t('이름')}</th>
-                    <th>{t('종류')}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.connectors.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <span className="swatch" style={{ background: connectorColor(draft.connectors, c.id) }} />
-                      </td>
-                      <td>
-                        <input value={c.name} onChange={(e) => setDraft((d) => updateConnector(d, c.id, { name: e.target.value }))} />
-                      </td>
-                      <td>
-                        <input
-                          aria-label={t('커넥터 종류')}
-                          list="connector-type-options"
-                          value={c.type}
-                          placeholder="JST-XH 4P"
-                          onChange={(e) => setDraft((d) => updateConnector(d, c.id, { type: e.target.value }))}
-                        />
-                        {c.type.trim() && (
-                          <small className={housings.get(c.type.trim().toLowerCase()) ? 'mate ok' : 'mate'} data-testid="connector-mate">
-                            {housings.get(c.type.trim().toLowerCase())
-                              ? t('짝: {name}', { name: housings.get(c.type.trim().toLowerCase())!.name })
-                              : t('짝 하우징 미지정')}
-                          </small>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="icon"
-                          title={t('커넥터 삭제')}
-                          aria-label={t('커넥터 삭제')}
-                          onClick={() => {
-                            setDraft((d) => removeConnector(d, c.id))
-                            if (activeConnectorId === c.id) setActiveConnectorId('')
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <datalist id="connector-type-options">
-              {[...housings.values()].map((h) => (
-                <option key={h.id} value={h.connectorType} label={h.name} />
-              ))}
-            </datalist>
-
-            <h3>{t('핀 ({n})', { n: draft.pins.length })}</h3>
-            {draft.connectors.length > 0 && (
-              <label className="field">
-                <span>{t('새 핀의 커넥터')}</span>
-                <select value={activeConnectorId} onChange={(e) => setActiveConnectorId(e.target.value)}>
-                  <option value="">{t('(없음)')}</option>
-                  {draft.connectors.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {draft.pins.length === 0 ? (
-              <p className="empty">{t('사진을 클릭해 핀을 찍으세요.')}</p>
-            ) : (
-              <table className="grid-table" data-testid="pin-table">
-                <thead>
-                  <tr>
-                    <th>{t('번호')}</th>
-                    <th>{t('신호')}</th>
-                    <th>{t('커넥터')}</th>
-                    <th>{t('전기 종류')}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.pins.map((p) => (
-                    <tr
-                      key={p.id}
-                      className={p.id === selectedPinId ? 'selected' : ''}
-                      onClick={() => setSelectedPinId(p.id)}
-                    >
-                      <td>
-                        <input
-                          className="narrow"
-                          aria-label={t('핀 번호')}
-                          value={p.number}
-                          onChange={(e) => setDraft((d) => updatePin(d, p.id, { number: e.target.value }))}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label={t('신호')}
-                          value={p.signal ?? ''}
-                          placeholder="SDA"
-                          onChange={(e) => setDraft((d) => updatePin(d, p.id, { signal: e.target.value }))}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          value={p.connectorId ?? ''}
-                          onChange={(e) =>
-                            setDraft((d) => updatePin(d, p.id, { connectorId: e.target.value || null }))
-                          }
-                        >
-                          <option value="">-</option>
-                          {draft.connectors.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          aria-label={t('전기 종류')}
-                          title={t('KiCad 핀 종류·시뮬레이션에 쓰입니다')}
-                          value={p.electrical ?? 'passive'}
-                          onChange={(e) => setDraft((d) => updatePin(d, p.id, { electrical: e.target.value as PinElectrical }))}
-                        >
-                          {PIN_ELECTRICALS.map((k) => (
-                            <option key={k} value={k}>
-                              {t(PIN_ELECTRICAL_LABEL[k])}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <button
-                          className="icon"
-                          title={t('핀 삭제')}
-                          aria-label={t('핀 삭제')}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDraft((d) => removePin(d, p.id))
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <PinTables
+              pins={draft.pins}
+              connectors={draft.connectors}
+              onChange={editPins}
+              selectedPinId={selectedPinId}
+              onSelectPin={setSelectedPinId}
+              activeConnectorId={activeConnectorId}
+              onActiveConnector={setActiveConnectorId}
+              housings={housings}
+            />
           </section>
         </div>
 

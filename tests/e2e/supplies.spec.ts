@@ -131,6 +131,12 @@ test('부속 부품: 부품함에 등록 → 전선 종류·수축 튜브 → BO
     await expect(editor.getByTestId('connector-mate')).toHaveText('짝: XHP-2 하우징')
     await editor.getByLabel('커넥터 종류').fill('Molex 2P')
     await expect(editor.getByTestId('connector-mate')).toHaveText('짝 하우징 미지정')
+    // 커넥터 색: 누를 수 있는 크기여야 한다 (표의 input 너비 100% 규칙에 눌려 4px가 된 적이 있다) → 고르면 ↺, 누르면 기본 색
+    const color = editor.getByLabel('커넥터 색')
+    expect((await color.boundingBox())!.width).toBeGreaterThanOrEqual(20)
+    await color.fill('#00ff00')
+    await editor.getByRole('button', { name: '기본 색으로' }).click()
+    await expect(color).toHaveValue('#e53935')
     await editor.getByRole('button', { name: '취소' }).click()
   } finally {
     await app.close()

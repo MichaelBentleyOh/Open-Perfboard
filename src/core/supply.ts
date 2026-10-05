@@ -3,7 +3,7 @@
 // - BOM에는 자동으로 넣지 않고 사용자가 [넣기]/[빼기]를 고른다 (project.bom.supplies)
 // - 쓰인 부속 부품은 배선도에 사본(project.supplies)으로 넣어 파일 하나로 열리게 한다
 import { isPinEnd } from './ends'
-import type { Project, Supply, SupplyChoice, SupplyKind, Wire, WireTubes } from './model'
+import type { PartDef, PartImage, Project, Supply, SupplyChoice, SupplyKind, Wire, WireTubes } from './model'
 import { inProjectCurrency } from './money'
 import { naturalCompare } from './sort'
 import { ko, msg, type T } from './i18n'
@@ -83,7 +83,8 @@ export function supplyUsage(project: Project, library: readonly Supply[] = []): 
   const missing = new Map<string, string[]>()
   for (const inst of project.instances) {
     const part = project.parts[inst.partId]
-    if (!part || part.connectors.length === 0) continue
+    // 배선도에 올린 부속 부품(하우징 등)에는 짝 하우징을 찾지 않는다
+    if (!part || part.supplyKind || part.connectors.length === 0) continue
     const pinsOn = new Map<string, number>()
     for (const pin of part.pins) {
       if (pin.connectorId && connected.has(`${inst.id}\u0000${pin.id}`)) pinsOn.set(pin.connectorId, (pinsOn.get(pin.connectorId) ?? 0) + 1)
@@ -269,6 +270,7 @@ export function checkSupply(s: Supply, t: T = ko): string[] {
   if (url && !isHttpUrl(url)) errors.push(t('구매 링크는 http:// 또는 https://로 시작해야 합니다'))
   if (s.unitPrice !== undefined && !(Number.isFinite(s.unitPrice) && s.unitPrice >= 0)) errors.push(t('단가는 0 이상의 숫자여야 합니다'))
   if (s.diameter !== undefined && !(Number.isFinite(s.diameter) && s.diameter > 0)) errors.push(t('지름은 0보다 큰 숫자여야 합니다'))
+  if (s.pins?.some((p) => !p.number.trim())) errors.push(t('비어 있는 핀 번호가 있습니다'))
   return errors
 }
 
@@ -285,6 +287,8 @@ export function finalizeSupply(s: Supply): Supply {
   if (s.drawing) out.drawing = s.drawing
   if (s.diameter !== undefined) out.diameter = s.diameter
   if (s.awg !== undefined) out.awg = s.awg
+  if (s.connectors?.length) out.connectors = s.connectors.map((c) => ({ ...c, name: c.name.trim(), type: c.type.trim() }))
+  if (s.pins?.length) out.pins = s.pins.map((p) => ({ ...p, number: p.number.trim() }))
   const only: Record<SupplyKind, readonly (keyof Supply)[]> = {
     housing: ['connectorType', 'terminalId'],
     terminal: [],
@@ -314,4 +318,36 @@ export const SUPPLY_KIND_LABEL: Record<SupplyKind, string> = {
   terminal: msg('단자'),
   tube: msg('수축 튜브'),
   wire: msg('전선')
+}
+
+// ---------------------------------------------------------------- 배선도에 올리기
+
+/** 배선도에 올린 부속 부품의 참조명 접두사 */
+export const SUPPLY_REF_PREFIX: Record<SupplyKind, string> = { housing: 'J', terminal: 'T', tube: 'HS', wire: 'W' }
+
+/** 사진(또는 그림)이 있으면 부품처럼 배선도에 올릴 수 있다 */
+export const canPlaceSupply = (s: Supply): s is Supply & { image: PartImage } => s.image !== undefined
+
+/**
+ * 배선도에 올릴 부품 정의. id는 부속 부품 id 그대로라 같은 부속 부품을 여러 번 올리면 한 정의를 같이 쓴다.
+ * BOM에서는 부품 행으로 세고, 분류는 부속 부품 종류로 보인다 (supplyKind)
+ */
+export function supplyAsPart(s: Supply): PartDef | undefined {
+  if (!canPlaceSupply(s)) return undefined
+  const part: PartDef = {
+    id: s.id,
+    name: s.name,
+    refPrefix: SUPPLY_REF_PREFIX[s.kind],
+    image: s.image,
+    ...(s.drawing ? { drawing: s.drawing } : {}),
+    connectors: s.connectors ?? [],
+    pins: s.pins ?? [],
+    supplyKind: s.kind
+  }
+  for (const k of ['partNumber', 'manufacturer', 'purchaseUrl', 'supplier', 'memo'] as const) {
+    if (s[k]) part[k] = s[k]
+  }
+  if (s.unitPrice !== undefined) part.unitPrice = s.unitPrice
+  if (s.currency) part.currency = s.currency
+  return part
 }

@@ -440,8 +440,8 @@ export const EN: Record<string, string> = {
   '선 위 핀 간격 맞추기 ({n})': 'Even out pins on guide ({n})',
   '보조선 삭제': 'Delete guide',
   '보조선 삭제 (Delete)': 'Delete guide (Delete)',
-  '사진 위를 끌어 보조선을 긋습니다 (수평·수직에 가까우면 곧게, Shift = 자유 각도) · 선을 눌러 고르고 끝점 손잡이로 조절 · Delete로 삭제':
-    'Drag on the photo to draw a guide (snaps straight near horizontal/vertical, Shift = any angle) · click a guide to select it, drag its end handles · Delete to remove',
+  '사진 위를 끌어 보조선을 긋습니다 (수평·수직에 가까우면 곧게, Shift = 자유 각도) · 선을 끌어 옮기고 끝점 손잡이로 길이·방향 조절 · Delete로 삭제':
+    'Drag on the photo to draw a guide (snaps straight near horizontal/vertical, Shift = any angle) · drag a guide to move it, drag its end handles to resize · Delete to remove',
   // 028 부품 줄 맞추기
   '줄 맞추기': 'Align',
   '왼쪽 맞추기': 'Align left',
@@ -552,8 +552,8 @@ export const EN: Record<string, string> = {
   "'{name}' 배선도를 지울까요?\n이 배선도의 부품·전선이 모두 지워집니다. (저장하기 전이면 파일은 그대로)":
     "Delete the diagram '{name}'?\nAll its parts and wires are removed. (The file is unchanged until you save.)",
   '배선도 목록': 'Diagrams',
-  '배선도 부품: 품명·수량은 부품에서 옵니다': 'Diagram part: item and quantity come from the diagram',
-  '배선도 부품은 단가·조달처·비고만 고칠 수 있습니다 (품명·수량은 배선도 기준). 여러 배선도를 고르면 같은 부품을 합쳐 보여 주고, 고친 값은 그 배선도들 모두에 들어갑니다. 소모품·예비품은 "＋ 항목 추가"로 넣으세요. 칸은 Enter 또는 다른 곳을 누르면 반영되고, Ctrl+Z로 되돌릴 수 있습니다.': 'For diagram parts only the price, supplier and notes can be edited (item and quantity follow the diagram). With several diagrams selected, the same part is merged into one row and edits apply to all of them. Add consumables and spares with "＋ Add item". Cells apply on Enter or when you click elsewhere, and Ctrl+Z undoes them.',
+  '배선도 부품: 품명은 부품에서, 수량은 배치한 개수가 기본입니다': 'Diagram part: the item name comes from the part; quantity defaults to the number placed',
+  '배선도 부품은 품명이 부품에서 오고, 수량은 배치한 개수가 기본입니다 (예비품만큼 늘릴 수 있음). 여러 배선도를 고르면 같은 부품을 합쳐 보여 주고, 고친 값은 그 배선도들 모두에 들어갑니다. 소모품·예비품은 "＋ 항목 추가"로 넣으세요. 칸은 Enter 또는 다른 곳을 누르면 반영되고, Ctrl+Z로 되돌릴 수 있습니다.': 'For diagram parts the item name comes from the part and the quantity defaults to the number placed (raise it for spares). With several diagrams selected, the same part is merged into one row and edits apply to all of them. Add consumables and spares with "＋ Add item". Cells apply on Enter or when you click elsewhere, and Ctrl+Z undoes them.',
   '배선도 이름': 'Diagram name',
   '배선도 지우기': 'Delete diagram',
   '배선도 하나만 고르면 수량을 고칠 수 있습니다': 'Select a single diagram to edit the quantity',
@@ -636,6 +636,7 @@ export const EN: Record<string, string> = {
   '양방향': 'Bidirectional',
   '전원 입력': 'Power input',
   '전원 출력': 'Power output',
+  'GND (접지)': 'GND (ground)',
   '오픈 컬렉터': 'Open collector',
   '연결 안 함': 'Not connected',
   '⎍ 기호': '⎍ Symbol',
@@ -829,4 +830,20 @@ export const EN: Record<string, string> = {
   '배선도에 부품을 놓으면 여기에 회로도 기호로 보입니다.': 'Parts you place on the diagram appear here as schematic symbols.',
   '이을 핀을 누르세요 · Esc 취소': 'Click the pin to connect · Esc to cancel',
   '회로도 배선 모드 · 핀을 눌러 시작 → 다른 핀을 누르면 배선도에도 전선이 생깁니다 · Esc = 선택 모드': 'Schematic wire mode · click a pin to start → click another pin (the wire also appears on the diagram) · Esc = select mode',
+  // 배경 지우기 · 커넥터 색 · 부속 부품 핀 · BOM 부품 수량
+  '배경 지우기': 'Remove background',
+  '배경색(크로마키)을 사진 전체에서 투명하게 합니다': 'Makes the background color (chroma key) transparent across the whole photo',
+  '지울 배경색 (처음에는 사진 가장자리 색)': 'Background color to remove (starts as the photo edge color)',
+  '스포이트: 화면에서 지울 색 집기': 'Eyedropper: pick the color to remove from the screen',
+  '스포이트': 'Eyedropper',
+  '허용 범위': 'Tolerance',
+  '지우는 중…': 'Removing…',
+  '원래대로': 'Restore',
+  '완료': 'Done',
+  '커넥터 색': 'Connector color',
+  '기본 색으로': 'Back to default color',
+  '그림 탭에서 그린 뒤 핀을 찍으세요.': 'Draw in the Drawing tab, then place pins.',
+  '핀을 찍으면 부품처럼 배선도에 올릴 수 있습니다': 'With pins, it can be placed on the diagram like a part',
+  '핀을 찍어 두면 부품함에서 배선도로 끌어다 놓고 전선을 이을 수 있습니다.': 'With pins placed, drag it from the library onto the diagram and connect wires to it.',
+  '배치한 개수': 'Number placed',
 }

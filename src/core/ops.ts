@@ -533,12 +533,13 @@ function compact<T extends object>(o: T): T {
   return out
 }
 
-export type BomOverridePatch = { unitPrice?: number | null; memo?: string | null; supplier?: string | null }
+export type BomOverridePatch = { quantity?: number | null; unitPrice?: number | null; memo?: string | null; supplier?: string | null }
 
-/** 배선도 부품 행의 단가·비고·조달처. null은 지운다 (단가는 부품 기본 단가로 돌아감) */
+/** 배선도 부품 행의 수량·단가·비고·조달처. null은 지운다 (수량은 배치한 개수로, 단가는 부품 기본 단가로 돌아감) */
 export function setBomOverride(project: Project, partId: string, patch: BomOverridePatch): Project {
   const overrides = { ...(project.bom?.overrides ?? {}) }
   const merged = { ...overrides[partId] } as BomOverride
+  if (patch.quantity !== undefined) merged.quantity = patch.quantity ?? undefined
   if (patch.unitPrice !== undefined) merged.unitPrice = patch.unitPrice ?? undefined
   if (patch.memo !== undefined) merged.memo = patch.memo?.trim() || undefined
   if (patch.supplier !== undefined) merged.supplier = patch.supplier?.trim() || undefined

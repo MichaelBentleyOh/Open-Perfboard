@@ -71,16 +71,24 @@ test('부품 편집기 보조선: 긋기 → 핀 N개 고르게, 가까이 찍�
     await expect(numbers).toHaveCount(8)
     await win.screenshot({ path: 'test-results/pin-guides.png' })
 
+    // 6. 보조선을 통째로 끌어 y = 0.7로 옮긴다 (길이·방향은 그대로) → 핀 2개 = 옮긴 선의 양 끝
+    await dialog.getByRole('button', { name: '╱ 보조선 긋기' }).click()
+    await drag(win, photo.at(0.3, 0.3), photo.at(0.3, 0.7))
+    await expect(dialog.getByRole('group', { name: '보조선 작업' })).toBeVisible()
+    await dialog.getByLabel('핀 개수').fill('2')
+    await dialog.getByRole('button', { name: '개 고르게 놓기' }).click()
+    await expect(numbers).toHaveCount(10)
+
     await dialog.getByRole('button', { name: '저장' }).click()
     await expect(dialog).toBeHidden()
   } finally {
     await app.close()
   }
 
-  // 저장된 핀: 새 핀 6개 중 선 위 5개는 y = 0.3, x 간격이 같다. 마지막 하나는 선 아래
+  // 저장된 핀: 새 핀 8개 중 선 위 5개는 y = 0.3, x 간격이 같다. 6번째는 선 아래, 마지막 둘은 옮긴 선의 양 끝
   const saved = JSON.parse(readFileSync(join(userData, 'library', 'test-mcu.json'), 'utf8')) as { pins: SavedPin[] }
   const added = saved.pins.slice(2)
-  expect(added).toHaveLength(6)
+  expect(added).toHaveLength(8)
   const onLine = added.slice(0, 5).sort((a, b) => a.x - b.x)
   for (const p of onLine) expect(p.y).toBeCloseTo(onLine[0].y, 6)
   expect(onLine[0].y).toBeCloseTo(0.3, 2)
@@ -89,6 +97,10 @@ test('부품 편집기 보조선: 긋기 → 핀 N개 고르게, 가까이 찍�
   expect(onLine[0].x).toBeCloseTo(0.2, 2)
   expect(onLine[4].x).toBeCloseTo(0.8, 2)
   expect(added[5].y).toBeGreaterThan(0.3 + 0.03)
+  const moved = added.slice(6).sort((a, b) => a.x - b.x)
+  for (const p of moved) expect(p.y).toBeCloseTo(0.7, 1)
+  expect(moved[0].x).toBeCloseTo(0.2, 1)
+  expect(moved[1].x).toBeCloseTo(0.8, 1)
   // 보조선은 부품 파일에 저장하지 않는다
   expect(JSON.stringify(saved)).not.toContain('guide')
 })

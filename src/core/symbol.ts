@@ -13,6 +13,7 @@ export const PIN_ELECTRICAL_LABEL: Record<PinElectrical, string> = {
   bidirectional: msg('양방향'),
   power_in: msg('전원 입력'),
   power_out: msg('전원 출력'),
+  ground: msg('GND (접지)'),
   open_collector: msg('오픈 컬렉터'),
   no_connect: msg('연결 안 함')
 }

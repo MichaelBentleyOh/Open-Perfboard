@@ -6,7 +6,8 @@ import { ko, type T } from './i18n'
 /** 사진을 아직 고르지 않은 편집 중 부품 */
 export type PartDraft = Omit<PartDef, 'image'> & { image?: PartImage }
 
-type HasPins = Pick<PartDef, 'pins' | 'connectors'> & { symbol?: PartSymbol }
+/** 핀·커넥터가 있는 것 (부품 초안, 핀 있는 부속 부품 초안) */
+export type HasPins = Pick<PartDef, 'pins' | 'connectors'> & { symbol?: PartSymbol }
 
 export function emptyPartDraft(id: string): PartDraft {
   return { id, name: '', connectors: [], pins: [] }
@@ -98,11 +99,19 @@ export function addConnector<T extends HasPins>(part: T, at: { id: string; type?
 export function updateConnector<T extends HasPins>(
   part: T,
   connectorId: string,
-  patch: Partial<Pick<Connector, 'name' | 'type'>>
+  patch: Partial<Pick<Connector, 'name' | 'type'>> & { color?: string | null }
 ): T {
   return {
     ...part,
-    connectors: part.connectors.map((c) => (c.id === connectorId ? { ...c, ...patch } : c))
+    connectors: part.connectors.map((c) => {
+      if (c.id !== connectorId) return c
+      const { color, ...rest } = patch
+      const next: Connector = { ...c, ...rest }
+      // 색: null이면 기본 색(순서대로)으로
+      if (color === null) delete next.color
+      else if (color !== undefined) next.color = color
+      return next
+    })
   }
 }
 

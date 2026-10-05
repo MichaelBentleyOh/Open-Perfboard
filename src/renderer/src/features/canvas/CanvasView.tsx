@@ -15,9 +15,11 @@ import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { selectionCount, useUiStore } from '@/stores/uiStore'
 import { useLibraryStore } from '@/stores/libraryStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { loadHtmlImage } from '@/features/part-editor/image'
+import { hasTransparency, loadHtmlImage } from '@/features/part-editor/image'
 import { connectorColor } from '@/features/part-editor/connectorColor'
-import { PART_DRAG_TYPE } from './dragTypes'
+import { PART_DRAG_TYPE, SUPPLY_DRAG_TYPE } from './dragTypes'
+import { useSupplyStore } from '@/stores/supplyStore'
+import { supplyAsPart } from '@core/supply'
 import { registerCanvasExporter } from './canvasExport'
 import { registerCanvasPointer } from './canvasPointer'
 import { registerCanvasZoom } from './canvasZoom'
@@ -818,7 +820,10 @@ export function CanvasView({ onZoomChange }: Props) {
 
   const handleDrop = (e: React.DragEvent) => {
     const partId = e.dataTransfer.getData(PART_DRAG_TYPE)
-    const part = useLibraryStore.getState().parts.find((p) => p.id === partId)
+    const supplyId = e.dataTransfer.getData(SUPPLY_DRAG_TYPE)
+    // 부속 부품은 부품 정의로 바꿔 올린다 (BOM에서는 부속 부품 종류로 보인다)
+    const supply = supplyId ? useSupplyStore.getState().supplies.find((s) => s.id === supplyId) : undefined
+    const part = supply ? supplyAsPart(supply) : useLibraryStore.getState().parts.find((p) => p.id === partId)
     if (!part) return
     e.preventDefault()
     const raw = toWorld(e.clientX, e.clientY)
@@ -916,7 +921,7 @@ export function CanvasView({ onZoomChange }: Props) {
       className={`canvas${cursorClass}`}
       data-testid="diagram-canvas"
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(PART_DRAG_TYPE)) {
+        if (e.dataTransfer.types.includes(PART_DRAG_TYPE) || e.dataTransfer.types.includes(SUPPLY_DRAG_TYPE)) {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'copy'
         }
@@ -1181,6 +1186,8 @@ const PartNode = memo(function PartNode(props: {
 }) {
   const { inst, part, image, center, selected, draggable, shadow, api } = props
   const { width, height } = partSize(part, inst.scale)
+  // 배경을 지운 사진은 흰 바탕·그림자 없이 모양 그대로. 바탕은 투명한 채 남겨 빈 곳을 눌러도 부품이 골라진다
+  const cutout = image !== undefined && hasTransparency(image)
   return (
     <Group
       x={center.x}
@@ -1199,8 +1206,8 @@ const PartNode = memo(function PartNode(props: {
       <Rect
         width={width}
         height={height}
-        fill="#fff"
-        shadowEnabled={shadow}
+        fill={cutout ? 'transparent' : '#fff'}
+        shadowEnabled={shadow && !cutout}
         shadowBlur={4}
         shadowOpacity={0.15}
         shadowForStrokeEnabled={false}

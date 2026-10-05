@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import type { Project } from '../../src/core/model'
+import { PROJECT_FILE_VERSION, type Project } from '../../src/core/model'
 import { buildTwoPartDiagram, getProject, launchApp, makeTempDir, makeUserDataDir, nextFrame, seedLibrary, stubDialogs } from './launch'
 
 const counts = (win: Page) => win.evaluate(() => window.__opbSchematic!.counts())
@@ -75,7 +75,7 @@ test('회로도: 배선도 부품이 기호로 → 끌기(격자)·회전·실�
     await win.keyboard.press('Control+s')
     await expect(win.getByRole('status')).toContainText('저장했습니다')
     const saved: Project = JSON.parse(readFileSync(`${file}.opb`, 'utf8'))
-    expect(saved.version).toBe(10)
+    expect(saved.version).toBe(PROJECT_FILE_VERSION)
     expect(Object.keys(saved.schematic!.symbols!).sort()).toEqual([u1, u2].sort())
     expect(saved.schematic!.labeled).toHaveLength(2)
 

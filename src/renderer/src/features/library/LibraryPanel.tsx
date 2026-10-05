@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { nanoid } from 'nanoid'
 import type { PartDef, Supply, SupplyKind } from '@core/model'
 import { SUPPLY_KINDS } from '@core/model'
-import { SUPPLY_KIND_LABEL, emptySupply, supplySummary } from '@core/supply'
+import { SUPPLY_KIND_LABEL, canPlaceSupply, emptySupply, supplySummary } from '@core/supply'
 import { emptyPartDraft, type PartDraft } from '@core/part'
 import { useLibraryStore } from '@/stores/libraryStore'
 import { useSupplyStore } from '@/stores/supplyStore'
 import { SupplyEditor } from './SupplyEditor'
 import { PartEditor } from '@/features/part-editor/PartEditor'
-import { PART_DRAG_TYPE } from '@/features/canvas/dragTypes'
+import { PART_DRAG_TYPE, SUPPLY_DRAG_TYPE } from '@/features/canvas/dragTypes'
 import { planImport, readLibraryFile, serializeLibrary } from '@core/library'
 import { attachmentIdsOf, type AttachmentData } from '@core/attachment'
 import { collectAttachmentData } from '@/services/attachmentService'
@@ -174,7 +174,18 @@ export function LibraryPanel() {
           )}
           <ul className="part-list supply-list" data-testid="supply-list">
             {filteredSupplies.map((s) => (
-              <li key={s.id} className="part-item supply-item" onDoubleClick={() => setEditingSupply({ draft: s, isNew: false })}>
+              <li
+                key={s.id}
+                className="part-item supply-item"
+                // 사진이 있으면 부품처럼 배선도에 올린다 (핀을 찍어 두면 전선을 이을 수 있다)
+                draggable={canPlaceSupply(s)}
+                title={canPlaceSupply(s) ? t('캔버스로 끌어다 놓으세요') : undefined}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(SUPPLY_DRAG_TYPE, s.id)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onDoubleClick={() => setEditingSupply({ draft: s, isNew: false })}
+              >
                 {s.image ? (
                   <img src={s.image.data} alt="" />
                 ) : (
@@ -184,7 +195,7 @@ export function LibraryPanel() {
                 )}
                 <div className="part-info">
                   <strong>{s.name}</strong>
-                  <span>{[t(SUPPLY_KIND_LABEL[s.kind]), supplySummary(s, t)].filter(Boolean).join(' · ')}</span>
+                  <span>{[t(SUPPLY_KIND_LABEL[s.kind]), supplySummary(s, t), s.pins?.length ? t('핀 {n}', { n: s.pins.length }) : ''].filter(Boolean).join(' · ')}</span>
                 </div>
                 <div className="part-actions">
                   <button className="icon" title={t('편집')} aria-label={t('편집')} onClick={() => setEditingSupply({ draft: s, isNew: false })}>

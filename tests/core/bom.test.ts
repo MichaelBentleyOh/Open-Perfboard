@@ -152,3 +152,23 @@ describe('BOM 편집 연산', () => {
     )
   })
 })
+
+describe('BOM 부품 수량 고치기', () => {
+  const part = makePart('r', { unitPrice: 100 })
+  const placed = [0, 1].reduce((p, i) => addInstance(p, part, { id: `i${i}`, x: 0, y: 0 }), emptyProject('t'))
+
+  it('배치한 개수가 기본, 고치면 그 수량으로 금액을 낸다', () => {
+    expect(buildBom(placed)[0]).toMatchObject({ quantity: 2, suggested: 2, amount: 200 })
+    const p = setBomOverride(placed, 'r', { quantity: 5 })
+    expect(buildBom(p)[0]).toMatchObject({ quantity: 5, suggested: 2, amount: 500 })
+    // null이면 다시 배치한 개수
+    expect(buildBom(setBomOverride(p, 'r', { quantity: null }))[0].quantity).toBe(2)
+    expect(setBomOverride(p, 'r', { quantity: null }).bom).toBeUndefined()
+  })
+
+  it('파일에 저장하고 다시 읽는다', () => {
+    const p = setBomOverride(placed, 'r', { quantity: 5 })
+    const again = parseProject(serializeProject(p))
+    expect(again.ok && again.value.bom?.overrides).toEqual({ r: { quantity: 5 } })
+  })
+})

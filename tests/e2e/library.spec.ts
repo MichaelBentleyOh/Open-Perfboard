@@ -37,6 +37,13 @@ test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 �
     await dialog.getByLabel('신호').nth(1).fill('SDA')
 
     await dialog.getByPlaceholder('제어 보드 CB-100').fill('테스트 보드')
+
+    // 배경 지우기 (크로마키): 키 색 = 사진 가장자리 색 → 완료
+    await dialog.getByRole('button', { name: '배경 지우기' }).click()
+    const bg = dialog.getByRole('group', { name: '배경 지우기' })
+    await expect(bg.getByLabel('배경색')).toHaveValue('#ffffff')
+    await expect(bg.getByRole('button', { name: '완료' })).toBeEnabled()
+    await bg.getByRole('button', { name: '완료' }).click()
     await win.screenshot({ path: 'test-results/part-editor.png' })
     await dialog.getByRole('button', { name: '저장' }).click()
     await expect(dialog).toBeHidden()
@@ -44,6 +51,17 @@ test('부품 추가 → 핀 찍기 → 번호 수정 → 저장 → 재시작 �
     const list = win.getByTestId('part-list')
     await expect(list).toContainText('테스트 보드')
     await expect(list).toContainText('핀 2')
+    // 저장된 사진은 배경(모서리)이 투명한 PNG
+    const corner = await list.locator('img').first().evaluate(async (img: HTMLImageElement) => {
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const g = c.getContext('2d')!
+      g.drawImage(img, 0, 0)
+      return [img.src.slice(0, 15), g.getImageData(1, 1, 1, 1).data[3]]
+    })
+    expect(corner).toEqual(['data:image/png;', 0])
     await win.screenshot({ path: 'test-results/library-added.png' })
   } finally {
     await app.close()

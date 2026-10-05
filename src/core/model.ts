@@ -1,7 +1,10 @@
 // 프로젝트 파일(.opb)과 부품 라이브러리가 공유하는 데이터 모델
 
-/** v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) · v9: 회로도 기호·핀 전기 종류 (038) · v10: 배선도마다 회로도 (039) */
-export const PROJECT_FILE_VERSION = 10
+/**
+ * v2: 전선 끝이 핀 또는 접속점(junction)일 수 있다 · v8: 부품·부속 부품 그림 원본(drawing, 037b) · v9: 회로도 기호·핀 전기 종류 (038) · v10: 배선도마다 회로도 (039)
+ * · v11: 커넥터 색, GND 핀, BOM 부품 수량, 배선도에 올린 부속 부품
+ */
+export const PROJECT_FILE_VERSION = 11
 export const DEFAULT_REF_PREFIX = 'U'
 
 /** 부품 사진. data는 base64 data URL */
@@ -91,11 +94,13 @@ export interface Connector {
   id: string
   name: string
   type: string
+  /** 핀 색 (#rrggbb). 없으면 커넥터 순서대로 기본 색 */
+  color?: string
 }
 
 /** 핀의 전기 종류 (038). KiCad 핀 종류·시뮬레이션 GPIO에 쓴다. 신호 방향(Wire.direction)과는 따로 */
-export type PinElectrical = 'input' | 'output' | 'bidirectional' | 'passive' | 'power_in' | 'power_out' | 'open_collector' | 'no_connect'
-export const PIN_ELECTRICALS: readonly PinElectrical[] = ['passive', 'input', 'output', 'bidirectional', 'power_in', 'power_out', 'open_collector', 'no_connect']
+export type PinElectrical = 'input' | 'output' | 'bidirectional' | 'passive' | 'power_in' | 'power_out' | 'ground' | 'open_collector' | 'no_connect'
+export const PIN_ELECTRICALS: readonly PinElectrical[] = ['passive', 'input', 'output', 'bidirectional', 'power_in', 'power_out', 'ground', 'open_collector', 'no_connect']
 
 export interface Pin {
   id: string
@@ -161,6 +166,8 @@ export interface PartDef {
   symbol?: PartSymbol
   connectors: Connector[]
   pins: Pin[]
+  /** 부속 부품을 배선도에 올린 사본이면 그 종류 (BOM 분류). id는 부속 부품 id와 같다 */
+  supplyKind?: SupplyKind
 }
 
 export type AttachmentType = 'pdf' | 'png' | 'jpeg' | 'webp'
@@ -303,6 +310,8 @@ export interface Schematic {
 
 /** 배선도 부품 행의 수정값 */
 export interface BomOverride {
+  /** 수량. 없으면 배치한 개수 */
+  quantity?: number
   unitPrice?: number
   memo?: string
   /** 조달처 (031) */
@@ -377,6 +386,9 @@ export interface Supply {
   awg?: number
   /** tube·wire: 묶음 설명 (예: "1 m 롤", "100개입") */
   pack?: string
+  /** 핀을 찍어 두면 부품처럼 배선도에 올릴 수 있다 (핀 좌표는 사진 기준 0~1) */
+  connectors?: Connector[]
+  pins?: Pin[]
 }
 
 export type Currency = 'KRW' | 'USD'

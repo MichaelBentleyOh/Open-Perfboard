@@ -5,6 +5,7 @@ import type { Drawing, Pin, Shape, SymbolPin } from '@core/model'
 import { shapeBounds, shapesInBox, updateShape } from '@core/drawing'
 import { pinLine, pinTextLayout, SYMBOL_GRID, SYMBOL_TEXT } from '@core/symbol'
 import { ellipseConfig, imageConfig, lineConfig, loadDrawingImages, rectConfig, textConfig } from './shapeNodes'
+import { checkerPattern } from '@/features/part-editor/image'
 import { useT } from '@/i18n'
 
 export type DrawTool = 'select' | 'rect' | 'ellipse' | 'triangle' | 'line' | 'text'
@@ -113,19 +114,6 @@ const SymbolPinView = memo(function SymbolPinView({
     </Group>
   )
 })
-
-/** 투명 배경을 나타내는 바둑판 무늬 */
-function checkerPattern(): HTMLCanvasElement {
-  const c = document.createElement('canvas')
-  c.width = c.height = 16
-  const g = c.getContext('2d')!
-  g.fillStyle = '#ffffff'
-  g.fillRect(0, 0, 16, 16)
-  g.fillStyle = '#eceff1'
-  g.fillRect(0, 0, 8, 8)
-  g.fillRect(8, 8, 8, 8)
-  return c
-}
 
 const snapTo = (v: number, on: boolean) => (on ? Math.round(v / GRID) * GRID : v)
 

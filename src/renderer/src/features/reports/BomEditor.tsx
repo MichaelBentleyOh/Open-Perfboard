@@ -204,11 +204,28 @@ export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => vo
                   <tr key={`p-${r.id}`} data-part={r.id}>
                     <td className="num">{r.no}</td>
                     <td className="category">{t(r.category)}</td>
-                    <td className="name" title={t('배선도 부품: 품명·수량은 부품에서 옵니다')}>
+                    <td className="name" title={t('배선도 부품: 품명은 부품에서, 수량은 배치한 개수가 기본입니다')}>
                       {r.name}
                     </td>
                     <td className="details">{bomDetails(r)}</td>
-                    <td className="right">{r.quantity}</td>
+                    <td className="right">
+                      {r.sources.length > 1 ? (
+                        <span title={t('배선도 하나만 고르면 수량을 고칠 수 있습니다')}>{r.quantity}</span>
+                      ) : (
+                        // 예비품 등으로 배치한 개수보다 많이 살 때. 비우거나 배치한 개수를 넣으면 다시 자동
+                        <MoneyInput
+                          label={t('수량')}
+                          value={r.quantity}
+                          onCommit={(v) => part(r, { quantity: v === undefined || v === r.suggested ? null : v })}
+                        />
+                      )}
+                      {r.suggested !== undefined && r.quantity !== r.suggested && (
+                        <small className="muted" title={t('배치한 개수')}>
+                          {' '}
+                          ({r.suggested})
+                        </small>
+                      )}
+                    </td>
                     <td className="right">
                       <MoneyInput label={t('예상 단가')} value={r.unitPrice} placeholder={r.mixedPrice ? t('여러 값') : undefined} onCommit={(v) => part(r, { unitPrice: v ?? null })} />
                     </td>
@@ -309,7 +326,7 @@ export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => vo
       )}
       <p className="hint-text bom-hint">
         {t(
-          '배선도 부품은 단가·조달처·비고만 고칠 수 있습니다 (품명·수량은 배선도 기준). 여러 배선도를 고르면 같은 부품을 합쳐 보여 주고, 고친 값은 그 배선도들 모두에 들어갑니다. 소모품·예비품은 "＋ 항목 추가"로 넣으세요. 칸은 Enter 또는 다른 곳을 누르면 반영되고, Ctrl+Z로 되돌릴 수 있습니다.'
+          '배선도 부품은 품명이 부품에서 오고, 수량은 배치한 개수가 기본입니다 (예비품만큼 늘릴 수 있음). 여러 배선도를 고르면 같은 부품을 합쳐 보여 주고, 고친 값은 그 배선도들 모두에 들어갑니다. 소모품·예비품은 "＋ 항목 추가"로 넣으세요. 칸은 Enter 또는 다른 곳을 누르면 반영되고, Ctrl+Z로 되돌릴 수 있습니다.'
         )}
       </p>
       {currencyOpen && <CurrencyDialog onClose={() => setCurrencyOpen(false)} />}

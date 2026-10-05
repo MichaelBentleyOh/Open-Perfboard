@@ -10,7 +10,7 @@ import {
   type SupplyKind,
   type Wire,
 } from "@core/model";
-import { supplySummary, type WireSupplyPatch } from "@core/supply";
+import { supplyAsPart, supplySummary, type WireSupplyPatch } from "@core/supply";
 import { useSupplyStore } from "@/stores/supplyStore";
 import { buildNetlist } from "@core/netlist";
 import { endInstanceId, endJunctionId } from "@core/ends";
@@ -339,7 +339,13 @@ function PartProps({ inst }: { inst: PartInstance }) {
   const users = project.instances
     .filter((i) => i.partId === part.id)
     .map((i) => i.refDes);
-  const lib = libraryParts.find((p) => p.id === part.id);
+  const supplies = useSupplyStore((s) => s.supplies);
+  // 배선도에 올린 부속 부품은 부품함의 그 부속 부품과 비교한다 (부품함 부품으로 저장하지 않는다)
+  const fromSupply = part.supplyKind !== undefined;
+  const supply = fromSupply ? supplies.find((s) => s.id === part.id) : undefined;
+  const lib = fromSupply
+    ? supply && supplyAsPart(supply)
+    : libraryParts.find((p) => p.id === part.id);
   const spec = (
     patch: Parameters<ReturnType<typeof store>["updatePartDef"]>[1],
   ) => store().updatePartDef(part.id, patch);
@@ -479,13 +485,15 @@ function PartProps({ inst }: { inst: PartInstance }) {
       <TransformButtons ids={[inst.id]} />
 
       {!lib ? (
+        !fromSupply && (
         <button onClick={saveToLibrary}>{t("부품함에 추가")}</button>
+        )
       ) : (
         differs(partForProject(project, lib), part) && (
           <div className="callout" data-testid="library-differs">
             <p>{t("부품함과 다릅니다")}</p>
             <div className="button-stack">
-              <button onClick={saveToLibrary}>{t("부품함에도 저장")}</button>
+              {!fromSupply && <button onClick={saveToLibrary}>{t("부품함에도 저장")}</button>}
               <button onClick={revert}>{t("부품함 값으로 되돌리기")}</button>
             </div>
           </div>

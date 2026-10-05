@@ -2314,6 +2314,81 @@ button.grow {
   gap: 8px;
   min-width: 0;
 }
+/* 부속 부품 핀 찍기: 부품 편집기처럼 [사진 | 칸] */
+.modal.supply-editor.pinning {
+  width: min(1200px, 94vw);
+  height: min(820px, 92vh);
+}
+.supply-editor-body.with-pins {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  gap: 0;
+}
+.supply-editor-body.with-pins > .photo-area {
+  flex: 1;
+}
+.supply-editor-body.with-pins .supply-fields {
+  width: 380px;
+  flex: none;
+  padding: 12px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+}
+.supply-fields h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 2px;
+  font-size: 13px;
+}
+.supply-fields .button-row,
+.form-area .field-row {
+  flex-wrap: wrap;
+}
+/* 사진 배경 지우기: 허용 범위 · 원래대로 · 완료 */
+.background-tool {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.background-tool .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.background-tool input[type='range'] {
+  width: 110px;
+}
+/* 커넥터 색: 눌러서 고르는 동그란 색 칸 */
+.connector-color {
+  white-space: nowrap;
+}
+/* .grid-table input(너비 100%)보다 우선해야 칸이 쪼그라들지 않는다 */
+.grid-table input.swatch-input,
+.swatch-input {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.swatch-input::-webkit-color-swatch {
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border);
+}
 .supply-questions {
   display: flex;
   flex-direction: column;
