@@ -3,6 +3,7 @@ import { strFromU8, unzipSync } from 'fflate'
 import { bomXlsx, buildBom, type BomRow } from '@core/bom'
 import { buildXlsx, columnName, xmlEscape } from '@core/xlsx'
 import { addBomItem, setBomOverride } from '@core/ops'
+import { translator } from '@core/i18n'
 import { loadSample } from '../helpers'
 
 const files = (bytes: Uint8Array) => Object.fromEntries(Object.entries(unzipSync(bytes)).map(([k, v]) => [k, strFromU8(v)]))
@@ -83,6 +84,17 @@ describe('BOM 엑셀', () => {
     const unpriced = rows.filter((r) => r.unitPrice === undefined).length
     if (unpriced) expect(sheet).toContain(`단가 미입력 ${unpriced}건`)
     expect(files(bomXlsx(rows))['xl/styles.xml']).toContain('formatCode="#,##0"')
+  })
+
+  it('구매 링크는 "구매사이트"라는 글자의 하이퍼링크 (주소는 링크 대상에만)', () => {
+    const p = addBomItem(loadSample(), { id: 'i1', name: '수축 튜브', quantity: 2, purchaseUrl: 'https://shop.example/tube' })
+    const f = files(bomXlsx(buildBom(p)))
+    const sheet = f['xl/worksheets/sheet1.xml']
+    expect(sheet).toContain('<t xml:space="preserve">구매사이트</t>')
+    expect(sheet).not.toContain('https://shop.example/tube')
+    expect(sheet).toContain('<hyperlink ref=')
+    expect(f['xl/worksheets/_rels/sheet1.xml.rels']).toContain('Target="https://shop.example/tube"')
+    expect(files(bomXlsx(buildBom(p), translator('en')))['xl/worksheets/sheet1.xml']).toContain('>Purchase site</t>')
   })
 
   it('소수 단가가 있으면 소수 둘째 자리 서식, 빈 BOM도 파일이 된다', () => {

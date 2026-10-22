@@ -3,6 +3,7 @@ import type { Currency, Project, SupplyKind } from './model'
 import { SUPPLY_KIND_LABEL, supplyUsage } from './supply'
 import { roundMoney } from './money'
 import { naturalCompare } from './sort'
+import { isHttpUrl } from './url'
 import { buildXlsx, type XlsxCell, type XlsxColumn } from './xlsx'
 import { ko, msg, type T } from './i18n'
 
@@ -173,10 +174,27 @@ export function bomColumns(tr: T = ko): CsvColumn<BomRow>[] {
 }
 export const BOM_COLUMNS = bomColumns()
 
-/** BOM CSV: 행들 + 마지막 합계 행 (수량 합, 총액) */
+/** 엑셀 HYPERLINK 함수가 받는 주소의 최대 길이 */
+const HYPERLINK_MAX = 255
+
+/**
+ * CSV의 구매 링크 칸. CSV에는 링크를 담을 수 없으므로 엑셀 HYPERLINK 수식으로 넣어
+ * 엑셀에서 "구매사이트"라고 보이고 누르면 열리게 한다.
+ * http/https 주소가 아니거나 HYPERLINK 한도(255자)를 넘으면 주소를 그대로 둔다 (링크를 잃지 않게)
+ */
+export function csvPurchaseLink(url: string | undefined, tr: T = ko): string | undefined {
+  if (!url) return undefined
+  if (!isHttpUrl(url) || url.length > HYPERLINK_MAX) return url
+  const quote = (s: string) => `"${s.replace(/"/g, '""')}"`
+  return `=HYPERLINK(${quote(url)},${quote(tr('구매사이트'))})`
+}
+
+/** BOM CSV: 행들 + 마지막 합계 행 (수량 합, 총액). 구매 링크는 "구매사이트" 링크 수식 */
 export function bomCsv(rows: readonly BomRow[], tr: T = ko): string {
   const t = bomTotals(rows)
-  const columns = bomColumns(tr)
+  const columns = bomColumns(tr).map((c) =>
+    c.header === '구매사이트' ? { ...c, value: (r: BomRow) => csvPurchaseLink(r.purchaseUrl, tr) } : c
+  )
   const cells = columns.map((c) => {
     if (c.header === '번호') return tr('합계')
     if (c.header === '수량') return t.quantity
@@ -199,13 +217,13 @@ const XLSX_COLUMNS: XlsxColumn[] = [
   { header: msg('예상 단가'), width: 12 },
   { header: msg('예상 총액'), width: 14 },
   { header: msg('조달처'), width: 14 },
-  { header: msg('구매사이트'), width: 36 },
+  { header: msg('구매사이트'), width: 12 },
   { header: msg('비고'), width: 24 }
 ]
 
 /**
  * BOM 엑셀 파일. 수량·단가는 숫자, 금액은 수식(=수량×단가), 마지막 합계 행도 수식(SUM)이라
- * 엑셀에서 값을 고치면 다시 계산된다. 구매 링크는 누르면 열리는 하이퍼링크.
+ * 엑셀에서 값을 고치면 다시 계산된다. 구매 링크는 "구매사이트"라고 보이고 누르면 열리는 하이퍼링크.
  */
 export function bomXlsx(rows: readonly BomRow[], tr: T = ko, currency: Currency = 'KRW'): Uint8Array {
   const t = bomTotals(rows)
@@ -221,7 +239,8 @@ export function bomXlsx(rows: readonly BomRow[], tr: T = ko, currency: Currency 
       // 단가가 섞인 합친 행은 수식 없이 값만 (수량 × 한 단가가 아니다)
       r.amount === undefined ? undefined : r.mixedPrice ? { v: r.amount, money: true } : { v: r.amount, f: `E${n}*F${n}`, money: true },
       r.supplier,
-      r.purchaseUrl ? { v: r.purchaseUrl, link: r.purchaseUrl } : undefined,
+      // 링크로 만들 수 없는 주소는 글자로 그대로 (주소를 잃지 않게)
+      r.purchaseUrl ? (isHttpUrl(r.purchaseUrl) ? { v: tr('구매사이트'), link: r.purchaseUrl } : r.purchaseUrl) : undefined,
       r.memo
     ]
   })

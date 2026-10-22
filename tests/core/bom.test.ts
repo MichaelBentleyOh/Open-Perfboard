@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOM_COLUMNS, bomCsv, bomTotals, buildBom } from '@core/bom'
+import { BOM_COLUMNS, bomCsv, bomTotals, buildBom, csvPurchaseLink } from '@core/bom'
 import { toCsv } from '@core/csv'
 import { translator } from '@core/i18n'
 import { formatMoney, parseAmount, roundMoney } from '@core/money'
@@ -64,12 +64,24 @@ describe('buildBom', () => {
     expect(again.ok && again.value.bom?.overrides?.['part-ctrl'].supplier).toBe('엘레파츠')
   })
 
-  it('구매 링크가 행과 CSV에 들어간다', () => {
+  it('구매 링크: CSV에는 "구매사이트"라고 보이는 엑셀 HYPERLINK 수식으로', () => {
     const p = loadSample()
     p.parts['part-ctrl'] = { ...p.parts['part-ctrl'], purchaseUrl: 'https://shop.example/esp32?id=1,2' }
     const rows = buildBom(p)
     expect(rows[1].purchaseUrl).toBe('https://shop.example/esp32?id=1,2')
+    // 칸 안의 " 와 , 때문에 CSV 따옴표로 감싸고 " 는 두 번
+    expect(bomCsv(rows)).toContain(',"=HYPERLINK(""https://shop.example/esp32?id=1,2"",""구매사이트"")",')
+    expect(bomCsv(rows, translator('en'))).toContain('""Purchase site"")"')
+    // 다른 표(PDF 등)가 쓰는 칸 정의는 주소 그대로
     expect(toCsv(rows, BOM_COLUMNS)).toContain('"https://shop.example/esp32?id=1,2"')
+  })
+
+  it('구매 링크: 주소 속 따옴표는 수식 안에서 두 번, HYPERLINK 한도(255자)를 넘거나 http가 아니면 주소 그대로', () => {
+    expect(csvPurchaseLink(undefined)).toBeUndefined()
+    expect(csvPurchaseLink('https://a.com/x"y')).toBe('=HYPERLINK("https://a.com/x""y","구매사이트")')
+    const long = `https://a.com/${'x'.repeat(250)}`
+    expect(csvPurchaseLink(long)).toBe(long)
+    expect(csvPurchaseLink('ftp://a.com/x')).toBe('ftp://a.com/x')
   })
 })
 
