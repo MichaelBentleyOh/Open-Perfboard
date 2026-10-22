@@ -31,10 +31,12 @@ interface Props {
   /** 작업실: 처음 보일 탭, 탭을 바꿀 때 알림 (저장 뒤 다시 열려도 보던 탭) */
   initialView?: PartView
   onViewChange?: (v: PartView) => void
+  /** 처음에 이름 칸에 포커스 (기본 켬). 작업실이 저장 뒤 다시 열 때는 끈다 */
+  autoFocusName?: boolean
 }
 
 /** 부품 추가/편집. 편집 내용은 저장 전까지 이 컴포넌트 안에만 있다 */
-export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange, initialView, onViewChange }: Props) {
+export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange, initialView, onViewChange, autoFocusName = true }: Props) {
   const t = useT()
   const [draft, setDraft] = useState<PartDraft>(initial)
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null)
@@ -253,7 +255,7 @@ export function PartEditor({ initial, isNew, onCancel, onSave, variant = 'modal'
             <h3>{t('기본 정보')}</h3>
             <label className="field">
               <span>{t('이름 *')}</span>
-              <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="제어 보드 CB-100" autoFocus />
+              <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="제어 보드 CB-100" autoFocus={autoFocusName} />
             </label>
             <label className="field">
               <span>{t('품번')}</span>

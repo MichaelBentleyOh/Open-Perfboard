@@ -239,6 +239,7 @@ export function StudioScreen() {
             onDirtyChange={s.setEditorDirty}
             initialView={s.partView ?? undefined}
             onViewChange={s.setPartView}
+            autoFocusName={s.editorOpened}
           />
         ) : sel?.kind === 'supply' && (sel.isNew || selectedSupply) ? (
           <SupplyEditor
@@ -249,6 +250,7 @@ export function StudioScreen() {
             onCancel={s.revert}
             onSave={(x) => s.saveItem('supply', x)}
             onDirtyChange={s.setEditorDirty}
+            autoFocusName={s.editorOpened}
           />
         ) : (
           <div className="studio-empty">

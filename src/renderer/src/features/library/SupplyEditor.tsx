@@ -31,13 +31,15 @@ interface Props {
   /** modal: 배선도 부품함 창 · panel: 부품 작업실 안 (037a) */
   variant?: 'modal' | 'panel'
   onDirtyChange?: (dirty: boolean) => void
+  /** 처음에 이름 칸에 포커스 (기본 켬). 작업실이 저장 뒤 다시 열 때는 끈다 */
+  autoFocusName?: boolean
 }
 
 /**
  * 부속 부품 편집 (027): BOM용 정보. 종류에 따라 칸이 달라진다.
  * 사진 위에 핀을 찍어 두면 부품처럼 배선도에 올릴 수 있다 (작업실: [핀] 탭, 부품함 창: [핀 찍기])
  */
-export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange }: Props) {
+export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'modal', onDirtyChange, autoFocusName = true }: Props) {
   const t = useT()
   const [start] = useState(() => toDraft(initial))
   const [draft, setDraft] = useState<SupplyDraft>(start)
@@ -217,7 +219,7 @@ export function SupplyEditor({ initial, isNew, onCancel, onSave, variant = 'moda
             </label>
             <label className="field">
               <span>{t('이름')}</span>
-              <input autoFocus value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder={t('예: XH 4P 하우징')} />
+              <input autoFocus={autoFocusName} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder={t('예: XH 4P 하우징')} />
             </label>
             <label className="field">
               <span>{t('품번')}</span>

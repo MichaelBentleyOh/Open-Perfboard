@@ -97,11 +97,23 @@ test('부품 그림판: 상자·원·선·글 그리기 → 색 → 실행 취�
     await editor.getByRole('tab', { name: '✏ 그림' }).click()
     await win.mouse.click(empty.x, empty.y)
     await expect(shapeCount(win)).toContainText('도형 4개')
+    // 다시 그린 그림판은 다음 프레임에 클릭 판정이 맞춰진다 (그 전에 누르면 느린 PC에서 옛 판정으로 선이 골라졌다)
+    await nextFrame(win)
     await win.mouse.click(r.x, r.y)
     await win.keyboard.press('Shift+ArrowLeft')
     await win.keyboard.press('Shift+ArrowLeft')
     await editor.getByRole('button', { name: '저장' }).click()
-    await expect.poll(() => JSON.parse(readFileSync(join(libDir, file), 'utf8')).drawing.shapes[0].x).toBe(rectX - 20)
+    const rectXNow = () => JSON.parse(readFileSync(join(libDir, file), 'utf8')).drawing.shapes[0].x
+    await expect.poll(rectXNow).toBe(rectX - 20)
+
+    // 그림 탭에서 저장한 뒤에도 키보드는 그림판 단축키로 (저장 뒤 이름 칸이 포커스를 가져가 R을 누르면 이름에 'r'이 써지던 것)
+    const nameInput = editor.getByPlaceholder('제어 보드 CB-100')
+    await expect(shapeCount(win)).toContainText('도형 4개') // 저장 뒤 편집기가 다시 열려 선택이 풀렸다
+    await expect(nameInput).not.toBeFocused()
+    await win.keyboard.press('r')
+    await expect(tools.getByRole('button', { name: '상자', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(nameInput).toHaveValue('그린 부품')
+    await win.keyboard.press('Escape')
 
     // 부속 부품도 같은 그림판 → 저장하면 사진이 생긴다
     await win.getByRole('tab', { name: /부속 부품/ }).click()

@@ -43,6 +43,11 @@ interface StudioState {
   setEditorDirty: (dirty: boolean) => void
   /** 편집 영역을 다시 시작하게 하는 번호 (저장·되돌리기 뒤) */
   editorKey: number
+  /**
+   * 편집 영역이 항목을 새로 열어 시작했다 → 이름 칸에 바로 쓰게 포커스.
+   * 저장·되돌리기로 다시 시작할 때는 false: 포커스를 이름 칸으로 가져가면 그림판의 방향키·Delete·Ctrl+Z가 이름 칸으로 간다
+   */
+  editorOpened: boolean
   /** 부품 편집기에서 보던 탭 (저장해 다시 열려도 그대로, 다른 항목을 열면 처음으로) */
   partView: PartView | null
   setPartView: (v: PartView) => void
@@ -75,7 +80,7 @@ export const useStudioStore = create<StudioState>((set, get) => {
   /** 편집 중인 내용·파일 변경을 버려도 되는지 묻는다 */
   const confirmEditor = () => !get().editorDirty || window.confirm(t('고치던 내용을 저장하지 않았습니다.\n버리고 계속할까요?'))
   const confirmFile = () => !get().dirty || window.confirm(t('부품함 파일에 저장하지 않은 변경이 있습니다.\n버리고 계속할까요?'))
-  const reset = () => ({ selected: null, editorDirty: false, editorKey: get().editorKey + 1 })
+  const reset = () => ({ selected: null, editorDirty: false, editorKey: get().editorKey + 1, editorOpened: true })
 
   return {
     target: { kind: 'mine' },
@@ -87,6 +92,7 @@ export const useStudioStore = create<StudioState>((set, get) => {
     editorDirty: false,
     setEditorDirty: (editorDirty) => set({ editorDirty }),
     editorKey: 0,
+    editorOpened: true,
     partView: null,
     setPartView: (partView) => set({ partView }),
 
@@ -94,11 +100,12 @@ export const useStudioStore = create<StudioState>((set, get) => {
       const cur = get().selected
       if (sel && cur && sel.id === cur.id && sel.kind === cur.kind && !sel.isNew) return true
       if (!confirmEditor()) return false
-      set({ selected: sel, editorDirty: false, editorKey: get().editorKey + 1, partView: null })
+      set({ selected: sel, editorDirty: false, editorKey: get().editorKey + 1, editorOpened: true, partView: null })
       return true
     },
 
-    revert: () => set({ selected: get().selected?.isNew ? null : get().selected, editorDirty: false, editorKey: get().editorKey + 1 }),
+    revert: () =>
+      set({ selected: get().selected?.isNew ? null : get().selected, editorDirty: false, editorKey: get().editorKey + 1, editorOpened: false }),
 
     saveItem: async (kind, item) => {
       const s = get()
@@ -110,7 +117,7 @@ export const useStudioStore = create<StudioState>((set, get) => {
           kind === 'part' ? { ...s.file, parts: upsertItem(s.file.parts, item as PartDef) } : { ...s.file, supplies: upsertItem(s.file.supplies, item as Supply) }
         set({ file, dirty: true })
       }
-      set({ selected: { kind, id: item.id }, editorDirty: false, editorKey: get().editorKey + 1 })
+      set({ selected: { kind, id: item.id }, editorDirty: false, editorKey: get().editorKey + 1, editorOpened: false })
       notify(t('저장했습니다: {name}', { name: item.name }))
     },
 
