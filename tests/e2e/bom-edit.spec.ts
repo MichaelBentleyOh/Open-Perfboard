@@ -37,10 +37,12 @@ test('BOM 편집: 단가 입력 → 금액·총액 자동 계산 → 항목 추�
     await expect(total).toHaveText('25,000원')
     await commit(partRow.getByLabel('비고'), '2개 묶음 구매')
 
-    // 3. 직접 항목 추가: 열수축 튜브 3 × 300 = 900 → 총액 25,900
+    // 3. 직접 항목 추가: 열수축 튜브 3 × 300 = 900 → 총액 25,900. 분류는 비어 있고 사용자가 쓴다
     await bom.getByRole('button', { name: '＋ 항목 추가' }).click()
     const item = bom.locator('tr[data-item]').first()
+    await expect(item.getByLabel('분류')).toHaveValue('')
     await commit(item.getByLabel('품명'), '열수축 튜브')
+    await commit(item.getByLabel('분류'), '소모품')
     await commit(item.getByLabel('수량'), '3')
     await commit(item.getByLabel('예상 단가'), '300')
     await expect(item.getByTestId('amount')).toHaveText('900원')
@@ -79,7 +81,7 @@ test('BOM 편집: 단가 입력 → 금액·총액 자동 계산 → 항목 추�
     await expect(win.getByRole('status')).toContainText('내보냈습니다')
     const csv = readFileSync(csvPath, 'utf8')
     expect(csv).toContain('1,부품,테스트 MCU,"TM-01 · U1, U2",2,12500,25000,,,2개 묶음 구매\r\n')
-    expect(csv).toContain('2,직접 추가,열수축 튜브,,3,300,900,,,\r\n')
+    expect(csv).toContain('2,소모품,열수축 튜브,,3,300,900,,,\r\n')
     expect(csv.endsWith('합계,,,,5,,25900,,,\r\n')).toBe(true)
 
     // 8-2. 엑셀: 금액은 수식(수량×단가), 합계는 SUM. 확장자는 자동으로 .xlsx
@@ -100,7 +102,7 @@ test('BOM 편집: 단가 입력 → 금액·총액 자동 계산 → 항목 추�
     await expect(win.getByTestId('doc-name')).toHaveText('bom-test')
     const saved = parseProject(readFileSync(`${opb}.opb`, 'utf8'))
     expect(saved.ok && saved.value.bom?.overrides?.['test-mcu']).toEqual({ unitPrice: 12500, memo: '2개 묶음 구매' })
-    expect(saved.ok && saved.value.bom?.items?.map((i) => [i.name, i.quantity, i.unitPrice])).toEqual([['열수축 튜브', 3, 300]])
+    expect(saved.ok && saved.value.bom?.items?.map((i) => [i.category, i.name, i.quantity, i.unitPrice])).toEqual([['소모품', '열수축 튜브', 3, 300]])
     expect((await getProject(win)).bom).toBeDefined()
   } finally {
     await app.close()

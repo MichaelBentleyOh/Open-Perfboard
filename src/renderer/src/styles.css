@@ -2550,6 +2550,10 @@ button.grow {
   white-space: nowrap;
   font-size: 12px;
 }
+/* 직접 추가한 항목의 분류 입력칸 */
+.bom-table .category input {
+  width: 80px;
+}
 .details-inputs {
   display: flex;
   gap: 4px;

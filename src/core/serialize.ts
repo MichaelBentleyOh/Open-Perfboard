@@ -841,6 +841,7 @@ function readBom(v: unknown, errors: Errors): ProjectBom | undefined {
       if (id === undefined || name === undefined || quantity === undefined) return undefined
       const item: BomItem = {
         id, name, quantity,
+        ...optStr(it, 'category', p, errors),
         ...optStr(it, 'partNumber', p, errors),
         ...optStr(it, 'manufacturer', p, errors),
         ...(unitPrice !== undefined ? { unitPrice } : {}),

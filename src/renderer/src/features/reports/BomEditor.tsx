@@ -69,10 +69,10 @@ const apply = (ids: readonly string[], fn: (p: Project) => Project) => useWorksp
 const sourceIds = (r: ScopedBomRow) => r.sources.map((s) => s.sheetId)
 
 /**
- * BOM 표 (편집 가능, 031). 칸: 번호 / 분류 / 품명 / 세부사항 / 수량 / 예상 단가 / 예상 총액 / 조달처 / 구매사이트 / 비고
+ * BOM 표 (편집 가능, 031). 칸: 번호 / 분류 / 품명 / 세부사항 / 수량 / 예상 단가 / 예상 총액 / 조달처 / 구매 사이트 / 비고
  * - 포함할 배선도를 고른다 (030). 여러 배선도의 같은 부품은 한 행으로 합치고, 고치면 그 배선도들 모두에 적용
  * - 배선도 부품 행: 품명·수량은 배선도에서 자동, 단가·조달처·비고만 편집
- * - 직접 추가한 행: 모든 칸 편집, 삭제 가능
+ * - 직접 추가한 행: 분류를 포함해 모든 칸 편집, 삭제 가능
  */
 export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => void; onExportXlsx: () => void }) {
   const t = useT()
@@ -153,7 +153,7 @@ export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => vo
                 <th className="right">{t('예상 단가')}</th>
                 <th className="right">{t('예상 총액')}</th>
                 <th>{t('조달처')}</th>
-                <th>{t('구매사이트')}</th>
+                <th>{t('구매 사이트')}</th>
                 <th>{t('비고')}</th>
                 <th />
               </tr>
@@ -238,8 +238,9 @@ export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => vo
                 ) : (
                   <tr key={`i-${r.sources[0].sheetId}-${r.id}`} data-item={r.id} className="bom-item">
                     <td className="num">{r.no}</td>
-                    <td className="category muted" title={t('직접 추가한 항목')}>
-                      {t(r.category)}
+                    {/* 직접 추가한 항목은 분류도 사용자가 쓴다 (예: 소모품·공구) */}
+                    <td className="category">
+                      <CommitInput aria-label={t('분류')} placeholder={t('분류')} value={r.category} onCommit={(v) => item(r, { category: v.trim() || undefined })} />
                     </td>
                     <td className="name">
                       <CommitInput
@@ -281,7 +282,7 @@ export function BomEditor({ onExportCsv, onExportXlsx }: { onExportCsv: () => vo
                     <td>{supplierCell(r, (v) => item(r, { supplier: v ?? undefined }))}</td>
                     <td>
                       <CommitInput
-                        aria-label={t('구매사이트')}
+                        aria-label={t('구매 사이트')}
                         placeholder="https://..."
                         value={r.purchaseUrl ?? ''}
                         onCommit={(v) => {

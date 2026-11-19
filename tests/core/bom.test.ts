@@ -40,7 +40,7 @@ describe('buildBom', () => {
 
   it('CSV: 번호·분류·품명·세부사항(품번·제조사·참조명)… 칸과 합계 행', () => {
     expect(bomCsv(buildBom(loadSample()))).toBe(
-      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매사이트,비고\r\n' +
+      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매 사이트,비고\r\n' +
         '1,부품,전원 커넥터 PWR-2P,CN1,1,,,,,\r\n' +
         '2,부품,제어 보드 CB-100,CB-100 · OPB Labs · U1,1,,,,,\r\n' +
         '합계,,,,2,,0,,,단가 미입력 2건\r\n'
@@ -57,20 +57,38 @@ describe('buildBom', () => {
     expect(rows.map((r) => [r.no, r.category, r.supplier])).toEqual([
       [1, '부품', undefined],
       [2, '부품', '엘레파츠'],
-      [3, '직접 추가', '다이소']
+      [3, '', '다이소']
     ])
-    expect(bomCsv(rows, translator('en'))).toContain('3,Added,케이블 타이,,1,,,다이소,,')
+    // 부품 분류는 고른 언어로, 분류를 쓰지 않은 직접 추가 항목은 빈칸
+    expect(bomCsv(rows, translator('en'))).toContain('2,Part,')
+    expect(bomCsv(rows, translator('en'))).toContain('3,,케이블 타이,,1,,,다이소,,')
     const again = parseProject(serializeProject(p))
     expect(again.ok && again.value.bom?.overrides?.['part-ctrl'].supplier).toBe('엘레파츠')
   })
 
-  it('구매 링크: CSV에는 "구매사이트"라고 보이는 엑셀 HYPERLINK 수식으로', () => {
+  it('직접 추가 항목의 분류는 사용자가 쓴 글 그대로 (번역하지 않음), 파일에 저장된다', () => {
+    let p = addBomItem(loadSample(), { id: 'x', category: '소모품', name: '케이블 타이', quantity: 1 })
+    // 사전에 있는 낱말이어도 번역하지 않는다
+    p = addBomItem(p, { id: 'y', category: '부품', name: '예비 퓨즈', quantity: 2 })
+    const rows = buildBom(p)
+    expect(rows.slice(-2).map((r) => r.category)).toEqual(['소모품', '부품'])
+    const en = bomCsv(rows, translator('en'))
+    expect(en).toContain('3,소모품,케이블 타이,')
+    expect(en).toContain('4,부품,예비 퓨즈,')
+    p = updateBomItem(p, 'x', { category: undefined })
+    expect(p.bom?.items?.[0]).not.toHaveProperty('category')
+    p = updateBomItem(p, 'x', { category: '공구' })
+    const again = parseProject(serializeProject(p))
+    expect(again.ok && again.value.bom?.items?.map((it) => it.category)).toEqual(['공구', '부품'])
+  })
+
+  it('구매 링크: CSV에는 "구매 사이트"라고 보이는 엑셀 HYPERLINK 수식으로', () => {
     const p = loadSample()
     p.parts['part-ctrl'] = { ...p.parts['part-ctrl'], purchaseUrl: 'https://shop.example/esp32?id=1,2' }
     const rows = buildBom(p)
     expect(rows[1].purchaseUrl).toBe('https://shop.example/esp32?id=1,2')
     // 칸 안의 " 와 , 때문에 CSV 따옴표로 감싸고 " 는 두 번
-    expect(bomCsv(rows)).toContain(',"=HYPERLINK(""https://shop.example/esp32?id=1,2"",""구매사이트"")",')
+    expect(bomCsv(rows)).toContain(',"=HYPERLINK(""https://shop.example/esp32?id=1,2"",""구매 사이트"")",')
     expect(bomCsv(rows, translator('en'))).toContain('""Purchase site"")"')
     // 다른 표(PDF 등)가 쓰는 칸 정의는 주소 그대로
     expect(toCsv(rows, BOM_COLUMNS)).toContain('"https://shop.example/esp32?id=1,2"')
@@ -78,7 +96,7 @@ describe('buildBom', () => {
 
   it('구매 링크: 주소 속 따옴표는 수식 안에서 두 번, HYPERLINK 한도(255자)를 넘거나 http가 아니면 주소 그대로', () => {
     expect(csvPurchaseLink(undefined)).toBeUndefined()
-    expect(csvPurchaseLink('https://a.com/x"y')).toBe('=HYPERLINK("https://a.com/x""y","구매사이트")')
+    expect(csvPurchaseLink('https://a.com/x"y')).toBe('=HYPERLINK("https://a.com/x""y","구매 사이트")')
     const long = `https://a.com/${'x'.repeat(250)}`
     expect(csvPurchaseLink(long)).toBe(long)
     expect(csvPurchaseLink('ftp://a.com/x')).toBe('ftp://a.com/x')

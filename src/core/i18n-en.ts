@@ -303,7 +303,6 @@ export const EN: Record<string, string> = {
   '배치된 부품이 없습니다. 배선도 탭에서 부품을 배치하거나 "＋ 항목 추가"로 직접 넣으세요.':
     'No parts placed. Place parts on the Diagram tab, or add items with "＋ Add item".',
   '배치된 부품이 없습니다.': 'No parts placed.',
-  '직접 추가한 항목': 'Item added by hand',
   '수량을 입력하세요': 'Enter a quantity',
   '항목 삭제': 'Delete item',
   '단가 미입력 {n}건': '{n} without price',
@@ -528,14 +527,13 @@ export const EN: Record<string, string> = {
   '하우징·단자·수축 튜브·전선을 등록해 두면 전선과 BOM에서 고를 수 있습니다.': 'Register housings, terminals, heat-shrink and wire here to pick them on wires and in the BOM.',
   '＋ 새 부속 부품': '＋ New supply',
   // 031 BOM 칸
-  '직접 추가': 'Added',
   '분류': 'Category',
   '품명': 'Item',
   '세부사항': 'Details',
   '예상 단가': 'Est. unit price',
   '예상 총액': 'Est. total',
   '조달처': 'Supplier',
-  '구매사이트': 'Purchase site',
+  '구매 사이트': 'Purchase site',
   // 030 여러 배선도, 031 BOM 칸
   'Open Perfboard 배선도 (.opb, .zip)': 'Open Perfboard diagram (.opb, .zip)',
   'Open Perfboard 배선도 묶음': 'Open Perfboard diagram bundle',

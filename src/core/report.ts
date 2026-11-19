@@ -137,7 +137,7 @@ export function buildReportHtml(o: ReportOptions): string {
     sections.push(`
     <section class="page">
       ${titleBlock('BOM')}
-      ${o.bom.length ? table(o.bom, pdfBomColumns(t), t, { 구매사이트: link, '예상 단가': money('unitPrice'), '예상 총액': money('amount') }, bomFooter(o.bom, t, o.currency ?? 'KRW')) : `<p class="empty">${esc(t('배치된 부품이 없습니다.'))}</p>`}
+      ${o.bom.length ? table(o.bom, pdfBomColumns(t), t, { '구매 사이트': link, '예상 단가': money('unitPrice'), '예상 총액': money('amount') }, bomFooter(o.bom, t, o.currency ?? 'KRW')) : `<p class="empty">${esc(t('배치된 부품이 없습니다.'))}</p>`}
     </section>`)
   }
 

@@ -321,6 +321,8 @@ export interface BomOverride {
 /** BOM에 직접 추가한 항목 (배선도에 없는 소모품 등) */
 export interface BomItem {
   id: string
+  /** 분류 (사용자가 입력, 예: 소모품·공구). 없으면 빈칸 */
+  category?: string
   name: string
   partNumber?: string
   manufacturer?: string

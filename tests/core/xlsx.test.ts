@@ -86,11 +86,11 @@ describe('BOM 엑셀', () => {
     expect(files(bomXlsx(rows))['xl/styles.xml']).toContain('formatCode="#,##0"')
   })
 
-  it('구매 링크는 "구매사이트"라는 글자의 하이퍼링크 (주소는 링크 대상에만)', () => {
+  it('구매 링크는 "구매 사이트"라는 글자의 하이퍼링크 (주소는 링크 대상에만)', () => {
     const p = addBomItem(loadSample(), { id: 'i1', name: '수축 튜브', quantity: 2, purchaseUrl: 'https://shop.example/tube' })
     const f = files(bomXlsx(buildBom(p)))
     const sheet = f['xl/worksheets/sheet1.xml']
-    expect(sheet).toContain('<t xml:space="preserve">구매사이트</t>')
+    expect(sheet).toContain('<t xml:space="preserve">구매 사이트</t>')
     expect(sheet).not.toContain('https://shop.example/tube')
     expect(sheet).toContain('<hyperlink ref=')
     expect(f['xl/worksheets/_rels/sheet1.xml.rels']).toContain('Target="https://shop.example/tube"')

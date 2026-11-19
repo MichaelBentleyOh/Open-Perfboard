@@ -61,7 +61,7 @@ test('저장 → 새로 만들기 → 열기 → BOM·결선표 → 내보내기
     await bom.getByRole('button', { name: 'CSV 내보내기' }).click()
     await expect(win.getByRole('status')).toContainText('내보냈습니다')
     expect(readFileSync(bomCsv, 'utf8')).toBe(
-      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매사이트,비고\r\n' +
+      '﻿번호,분류,품명,세부사항,수량,예상 단가,예상 총액,조달처,구매 사이트,비고\r\n' +
         '1,부품,테스트 MCU,"TM-01 · U1, U2",2,,,,,\r\n' +
         '합계,,,,2,,0,,,단가 미입력 1건\r\n'
     )

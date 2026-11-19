@@ -18,7 +18,7 @@ export interface BomRow {
   suggested?: number
   /** 번호 (1부터, 표 순서) */
   no: number
-  /** 분류 (번역 전 원문): 부품·하우징·단자·수축 튜브·전선·직접 추가 */
+  /** 분류. part·supply는 번역 전 원문(부품·하우징·단자·수축 튜브·전선), item은 사용자가 입력한 글(번역하지 않음, 없으면 빈칸) */
   category: string
   name: string
   partNumber?: string
@@ -53,7 +53,9 @@ const withAmount = (row: Omit<BomRow, 'amount' | 'no'>): BomRow => {
 
 /** 분류 원문 */
 export const CATEGORY_PART = msg('부품')
-export const CATEGORY_ITEM = msg('직접 추가')
+
+/** 보여 줄 분류: 직접 추가한 항목은 사용자가 쓴 글 그대로, 나머지는 고른 언어로 */
+export const categoryLabel = (r: Pick<BomRow, 'kind' | 'category'>, tr: T = ko): string => (r.kind === 'item' ? r.category : tr(r.category))
 
 /** 세부사항 = 품번 · 제조사 · 참조명 */
 export const bomDetails = (r: Pick<BomRow, 'partNumber' | 'manufacturer' | 'refDes'>): string =>
@@ -129,7 +131,7 @@ export function buildBom(project: Project): BomRow[] {
       withAmount({
         kind: 'item',
         id: item.id,
-        category: CATEGORY_ITEM,
+        category: item.category ?? '',
         name: item.name,
         partNumber: item.partNumber,
         manufacturer: item.manufacturer,
@@ -157,18 +159,18 @@ export function bomTotals(rows: readonly BomRow[]): BomTotals {
 /** 합계 행 비고: 단가가 없는 행 수 */
 export const unpricedNote = (n: number, t: T = ko) => t('단가 미입력 {n}건', { n })
 
-/** BOM 칸 (031): 번호 / 분류 / 품명 / 세부사항 / 수량 / 예상 단가 / 예상 총액 / 조달처 / 구매사이트 / 비고. 분류는 고른 언어로 */
+/** BOM 칸 (031): 번호 / 분류 / 품명 / 세부사항 / 수량 / 예상 단가 / 예상 총액 / 조달처 / 구매 사이트 / 비고. 분류는 고른 언어로 */
 export function bomColumns(tr: T = ko): CsvColumn<BomRow>[] {
   return [
     { header: msg('번호'), value: (r) => r.no },
-    { header: msg('분류'), value: (r) => tr(r.category) },
+    { header: msg('분류'), value: (r) => categoryLabel(r, tr) },
     { header: msg('품명'), value: (r) => r.name },
     { header: msg('세부사항'), value: (r) => bomDetails(r) },
     { header: msg('수량'), value: (r) => r.quantity },
     { header: msg('예상 단가'), value: (r) => r.unitPrice },
     { header: msg('예상 총액'), value: (r) => r.amount },
     { header: msg('조달처'), value: (r) => r.supplier },
-    { header: msg('구매사이트'), value: (r) => r.purchaseUrl },
+    { header: msg('구매 사이트'), value: (r) => r.purchaseUrl },
     { header: msg('비고'), value: (r) => r.memo }
   ]
 }
@@ -177,23 +179,26 @@ export const BOM_COLUMNS = bomColumns()
 /** 엑셀 HYPERLINK 함수가 받는 주소의 최대 길이 */
 const HYPERLINK_MAX = 255
 
+/** 내보낸 BOM(엑셀·CSV)에서 구매 링크 주소 대신 보이는 글자 */
+const PURCHASE_LINK_LABEL = msg('구매 사이트')
+
 /**
  * CSV의 구매 링크 칸. CSV에는 링크를 담을 수 없으므로 엑셀 HYPERLINK 수식으로 넣어
- * 엑셀에서 "구매사이트"라고 보이고 누르면 열리게 한다.
+ * 엑셀에서 "구매 사이트"라고 보이고 누르면 열리게 한다.
  * http/https 주소가 아니거나 HYPERLINK 한도(255자)를 넘으면 주소를 그대로 둔다 (링크를 잃지 않게)
  */
 export function csvPurchaseLink(url: string | undefined, tr: T = ko): string | undefined {
   if (!url) return undefined
   if (!isHttpUrl(url) || url.length > HYPERLINK_MAX) return url
   const quote = (s: string) => `"${s.replace(/"/g, '""')}"`
-  return `=HYPERLINK(${quote(url)},${quote(tr('구매사이트'))})`
+  return `=HYPERLINK(${quote(url)},${quote(tr(PURCHASE_LINK_LABEL))})`
 }
 
-/** BOM CSV: 행들 + 마지막 합계 행 (수량 합, 총액). 구매 링크는 "구매사이트" 링크 수식 */
+/** BOM CSV: 행들 + 마지막 합계 행 (수량 합, 총액). 구매 링크는 "구매 사이트" 링크 수식 */
 export function bomCsv(rows: readonly BomRow[], tr: T = ko): string {
   const t = bomTotals(rows)
   const columns = bomColumns(tr).map((c) =>
-    c.header === '구매사이트' ? { ...c, value: (r: BomRow) => csvPurchaseLink(r.purchaseUrl, tr) } : c
+    c.header === '구매 사이트' ? { ...c, value: (r: BomRow) => csvPurchaseLink(r.purchaseUrl, tr) } : c
   )
   const cells = columns.map((c) => {
     if (c.header === '번호') return tr('합계')
@@ -217,13 +222,13 @@ const XLSX_COLUMNS: XlsxColumn[] = [
   { header: msg('예상 단가'), width: 12 },
   { header: msg('예상 총액'), width: 14 },
   { header: msg('조달처'), width: 14 },
-  { header: msg('구매사이트'), width: 12 },
+  { header: msg('구매 사이트'), width: 12 },
   { header: msg('비고'), width: 24 }
 ]
 
 /**
  * BOM 엑셀 파일. 수량·단가는 숫자, 금액은 수식(=수량×단가), 마지막 합계 행도 수식(SUM)이라
- * 엑셀에서 값을 고치면 다시 계산된다. 구매 링크는 "구매사이트"라고 보이고 누르면 열리는 하이퍼링크.
+ * 엑셀에서 값을 고치면 다시 계산된다. 구매 링크는 "구매 사이트"라고 보이고 누르면 열리는 하이퍼링크.
  */
 export function bomXlsx(rows: readonly BomRow[], tr: T = ko, currency: Currency = 'KRW'): Uint8Array {
   const t = bomTotals(rows)
@@ -231,7 +236,7 @@ export function bomXlsx(rows: readonly BomRow[], tr: T = ko, currency: Currency 
     const n = i + 2
     return [
       r.no,
-      tr(r.category),
+      categoryLabel(r, tr) || undefined,
       r.name,
       bomDetails(r) || undefined,
       r.quantity,
@@ -240,7 +245,7 @@ export function bomXlsx(rows: readonly BomRow[], tr: T = ko, currency: Currency 
       r.amount === undefined ? undefined : r.mixedPrice ? { v: r.amount, money: true } : { v: r.amount, f: `E${n}*F${n}`, money: true },
       r.supplier,
       // 링크로 만들 수 없는 주소는 글자로 그대로 (주소를 잃지 않게)
-      r.purchaseUrl ? (isHttpUrl(r.purchaseUrl) ? { v: tr('구매사이트'), link: r.purchaseUrl } : r.purchaseUrl) : undefined,
+      r.purchaseUrl ? (isHttpUrl(r.purchaseUrl) ? { v: tr(PURCHASE_LINK_LABEL), link: r.purchaseUrl } : r.purchaseUrl) : undefined,
       r.memo
     ]
   })
